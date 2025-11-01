@@ -1522,7 +1522,7 @@ end
 
 local function EnableAutoExec()
     local scriptContent = [[
-loadstring(game:HttpGet("YOUR_SCRIPT_URL_HERE"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/somethingig/refs/heads/main/script.lua"))()
 ]]
     
     local success, err = pcall(function()
