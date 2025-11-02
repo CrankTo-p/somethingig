@@ -914,7 +914,44 @@ sections.Misc:AddToggle({
         end
     end
 })
+local DiscStandName = ""
 
+sections.Misc:AddBox({
+    enabled = true,
+    focused = false,
+    text = "Stand Name",
+    input = "Chariot Requiem",
+    flag = "Disc_Stand_Input",
+    callback = function(v)
+        DiscStandName = v
+    end
+})
+
+sections.Misc:AddButton({
+    enabled = true,
+    text = "Set Disc",
+    flag = "Disc_Set",
+    tooltip = "Set's a disc's stand and exp values",
+    risky = false,
+    confirm = false,
+    callback = function()
+        if DiscStandName == "" then
+            library:SendNotification("Please enter a stand name!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local Disc = character:FindFirstChildOfClass('Tool')
+        if Disc and Disc:FindFirstChild('DiscType') then
+            ValChange:FireServer(Disc.StolenAttributes.StolenStand, DiscStandName)
+            ValChange:FireServer(Disc.StolenAttributes.StolenStandExp, 10000000000)
+            ValChange:FireServer(Disc.DiscType, 'Stand')
+            ValChange:FireServer(Disc.CommandType, 'None')
+            library:SendNotification("Disc set to: " .. DiscStandName, 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("No disc equipped!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
 sections.Misc:AddToggle({
     enabled = true,
     text = "Stand Visibility",
@@ -1830,4 +1867,221 @@ game.Players.LocalPlayer.OnTeleport:Connect(function()
         SaveSettings()
     end
 end)
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Stand God Mode",
+    flag = "Stand_God_Button",
+    tooltip = "Sets stand damage protection to 0",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand and playerStand:FindFirstChild("DamageProtection") then
+            ValChange:FireServer(playerStand.DamageProtection, 0)
+            library:SendNotification("Stand God Mode activated!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("Stand not found or no DamageProtection!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Infinite Remote Control Range",
+    flag = "Infinite_RC_Button",
+    tooltip = "Creates MirrorStandSeperator value for infinite range",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand then
+            if playerStand:FindFirstChild("MirrorStandSeparator") then
+                library:SendNotification("MirrorStandSeparator already exists!", 3, Color3.new(1, 1, 0))
+                return
+            end
+            
+            local intValue = Instance.new("IntValue")
+            intValue.Name = "MirrorStandSeparator"
+            intValue.Value = 0
+            intValue.Parent = playerStand
+            
+            library:SendNotification("Infinite RC Range activated!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Make Stand Aerial",
+    flag = "Stand_Aerial_Button",
+    tooltip = "Creates SteamForm value for aerial movement",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand then
+            if playerStand:FindFirstChild("SteamForm") then
+                library:SendNotification("SteamForm already exists!", 3, Color3.new(1, 1, 0))
+                return
+            end
+            
+            local intValue = Instance.new("IntValue")
+            intValue.Name = "SteamForm"
+            intValue.Value = 0
+            intValue.Parent = playerStand
+            
+            library:SendNotification("Stand is now Aerial!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Infinite Stand Speed",
+    flag = "Infinite_Speed_Button",
+    tooltip = "Sets stand speed multipliers to max",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand and playerStand:FindFirstChild("Attributes") then
+            local atts = playerStand.Attributes
+            if atts:FindFirstChild("Electricity") then
+                ValChange:FireServer(atts.Electricity, 10000)
+            end
+            if atts:FindFirstChild("Liquid") then
+                ValChange:FireServer(atts.Liquid, 10000)
+            end
+            library:SendNotification("Stand speed maximized!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("Stand or Attributes not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Remove Stand Debuffs",
+    flag = "Remove_Debuffs_Button",
+    tooltip = "Removes negative status effects from stand",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local status = character:FindFirstChild("Status")
+        if not status then
+            library:SendNotification("Status not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local debuffs = {
+            "ThreeFreezed", "Stun", "LesserStun", "Undernourished", 
+            "LesserStunRunless", "Blinded", "TimeErase", "Dehydrated",
+            "LifeShot", "ShrunkenSlowDebuff", "StandTRIPPED", "Ragdolled",
+            "BookedHeavy", "Booked", "NoMovement", "Expelling", 
+            "ElectricTransferring", "MindControlled", "Slipped", 
+            "Charging", "BubbleEncased"
+        }
+        
+        local removed = 0
+        for _, debuff in pairs(debuffs) do
+            if status:FindFirstChild(debuff) then
+                status[debuff]:Destroy()
+                removed = removed + 1
+            end
+        end
+        
+        if removed > 0 then
+            library:SendNotification("Removed " .. removed .. " debuffs!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("No debuffs found!", 3, Color3.new(1, 1, 0))
+        end
+    end
+})
+
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Freeze Stand Position",
+    flag = "Freeze_Stand_Button",
+    tooltip = "Locks stand in current position",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand and playerStand:FindFirstChild("HumanoidRootPart") then
+            local root = playerStand.HumanoidRootPart
+            
+            if root:FindFirstChild("FreezePosition") then
+                root.FreezePosition:Destroy()
+                library:SendNotification("Stand position unfrozen!", 3, Color3.new(1, 1, 0))
+            else
+                local bodyPos = Instance.new("BodyPosition")
+                bodyPos.Name = "FreezePosition"
+                bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bodyPos.Position = root.Position
+                bodyPos.Parent = root
+                
+                library:SendNotification("Stand position frozen!", 3, Color3.new(0, 1, 0))
+            end
+        else
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+
+sections.Combat:AddButton({
+    enabled = true,
+    text = "Teleport Stand to Player",
+    flag = "TP_Stand_Button",
+    tooltip = "Teleports stand to your position",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local standsFolder = workspace:FindFirstChild("Stands")
+        if not standsFolder then
+            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local playerStand = standsFolder:FindFirstChild(player.Name)
+        if playerStand and playerStand:FindFirstChild("HumanoidRootPart") then
+            playerStand.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame
+            library:SendNotification("Stand teleported to you!", 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
 library:SendNotification("Made by Zik $20 dm me Zikiouh for full script", 5, Color3.new(1, 0, 0))
