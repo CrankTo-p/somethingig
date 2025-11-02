@@ -1342,7 +1342,106 @@ sections.ESPSection:AddSlider({
         hitboxTransparency = v
     end
 })
+local HeightSlid = 1.473
+local heightConnection = nil
 
+sections.Combat:AddSlider({
+    text = "Height Slider", 
+    flag = 'Height', 
+    suffix = "CM", 
+    value = 1.473,
+    min = 0.15, 
+    max = 5,
+    increment = 0.001,
+    callback = function(v) 
+        HeightSlid = v
+        
+        if not character or not character:FindFirstChild("Humanoid") then
+            library:SendNotification("Character not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local hum = character.Humanoid
+        
+        local baseHeight = 1.473
+        local baseDepth = 1.133
+        local baseWidth = 1.133
+        local baseHead = 1.133
+        
+        local heightRatio = v / baseHeight
+        
+        local newDepth = baseDepth * heightRatio
+        local newWidth = baseWidth * heightRatio
+        local newHead = baseHead * heightRatio
+        
+        if hum:FindFirstChild("BodyHeightScale") then
+            ValChange:FireServer(hum.BodyHeightScale, v)
+            
+            if heightConnection then
+                heightConnection:Disconnect()
+            end
+            
+            heightConnection = hum.BodyHeightScale.Changed:Connect(function(value)
+                if math.abs(value - HeightSlid) > 0.001 then
+                    ValChange:FireServer(hum.BodyHeightScale, HeightSlid)
+                    
+                    local ratio = HeightSlid / baseHeight
+                    ValChange:FireServer(hum.BodyDepthScale, baseDepth * ratio)
+                    ValChange:FireServer(hum.BodyWidthScale, baseWidth * ratio)
+                    ValChange:FireServer(hum.HeadScale, baseHead * ratio)
+                end
+            end)
+        end
+        
+        if hum:FindFirstChild("BodyDepthScale") then
+            ValChange:FireServer(hum.BodyDepthScale, newDepth)
+        end
+        
+        if hum:FindFirstChild("BodyWidthScale") then
+            ValChange:FireServer(hum.BodyWidthScale, newWidth)
+        end
+        
+        if hum:FindFirstChild("HeadScale") then
+            ValChange:FireServer(hum.HeadScale, newHead)
+        end
+    end
+})
+
+player.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5)
+    character = newChar
+    humanoid = newChar:WaitForChild("Humanoid")
+    
+    if humanoid:FindFirstChild("BodyHeightScale") then
+        ValChange:FireServer(humanoid.BodyHeightScale, HeightSlid)
+        
+        local baseHeight = 1.473
+        local baseDepth = 1.133
+        local baseWidth = 1.133
+        local baseHead = 1.133
+        
+        local ratio = HeightSlid / baseHeight
+        
+        ValChange:FireServer(humanoid.BodyDepthScale, baseDepth * ratio)
+        ValChange:FireServer(humanoid.BodyWidthScale, baseWidth * ratio)
+        ValChange:FireServer(humanoid.HeadScale, baseHead * ratio)
+        
+        if heightConnection then
+            heightConnection:Disconnect()
+        end
+        
+        heightConnection = humanoid.BodyHeightScale.Changed:Connect(function(value)
+            if math.abs(value - HeightSlid) > 0.001 then
+                ValChange:FireServer(humanoid.BodyHeightScale, HeightSlid)
+                
+                local ratio = HeightSlid / baseHeight
+                ValChange:FireServer(humanoid.BodyDepthScale, baseDepth * ratio)
+                ValChange:FireServer(humanoid.BodyWidthScale, baseWidth * ratio)
+                ValChange:FireServer(humanoid.HeadScale, baseHead * ratio)
+            end
+        end)
+    end
+end)
 sections.ESPSection:AddToggle({
     enabled = true,
     text = "Hitbox Visibility",
@@ -1973,12 +2072,14 @@ sections.Combat:AddButton({
         local playerStand = standsFolder:FindFirstChild(player.Name)
         if playerStand and playerStand:FindFirstChild("Attributes") then
             local atts = playerStand.Attributes
-            if atts:FindFirstChild("Electricity") then
-                ValChange:FireServer(atts.Electricity, 10000)
-            end
-            if atts:FindFirstChild("Liquid") then
-                ValChange:FireServer(atts.Liquid, 10000)
-            end
+
+            local Electricity = Instance.new("NumberValue", atts)
+            local Liquid = Instance.new("NumberValue", atts)
+            Liquid.Value = 10000
+            Electricity.Value = 10000
+            Electricity.Name = 'Electricity'
+            Liquid.Name = 'Liquid'
+            game.Lighting.Raining.Value = true
             library:SendNotification("Stand speed maximized!", 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("Stand or Attributes not found!", 3, Color3.new(1, 0, 0))
@@ -2081,6 +2182,57 @@ sections.Combat:AddButton({
             library:SendNotification("Stand teleported to you!", 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+local ammoConnections = {}
+
+sections.Combat:AddToggle({
+    enabled = true,
+    text = "Infinite Ammo",
+    flag = "InfiniteAmmo_Toggle",
+    callback = function(state)
+        if state then
+            local function handleTool(tool)
+                if tool:IsA("Tool") and tool:FindFirstChild("Ammo") then
+                    local ammo = tool.Ammo
+                    
+                    ValChange:FireServer(ammo, 6)
+                    
+                    local ammoConn = ammo.Changed:Connect(function(value)
+                        if library.flags.InfiniteAmmo_Toggle and value < 6 then
+                            ValChange:FireServer(ammo, 6)
+                        end
+                    end)
+                    
+                    ammoConnections[tool] = ammoConn
+                    
+                    tool.AncestryChanged:Connect(function()
+                        if not tool:IsDescendantOf(workspace) and ammoConnections[tool] then
+                            ammoConnections[tool]:Disconnect()
+                            ammoConnections[tool] = nil
+                        end
+                    end)
+                end
+            end
+            
+            for _, tool in pairs(character:GetChildren()) do
+                handleTool(tool)
+            end
+            
+            connections.infiniteAmmo = character.ChildAdded:Connect(function(child)
+                handleTool(child)
+            end)
+        else
+            if connections.infiniteAmmo then
+                connections.infiniteAmmo:Disconnect()
+                connections.infiniteAmmo = nil
+            end
+            
+            for tool, conn in pairs(ammoConnections) do
+                conn:Disconnect()
+            end
+            ammoConnections = {}
         end
     end
 })
