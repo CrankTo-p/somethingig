@@ -135,7 +135,7 @@ local inventoryLocations = {
 -- ========================================
 -- UI LIBRARY INITIALIZATION
 -- ========================================
-local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/drillygzzly/Other/main/1"))()
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/Informantsadasdsad/refs/heads/main/informant.wtf%20Lib%20Source.lua"))()
 library:init()
 
 local Window = library.NewWindow({
@@ -636,6 +636,7 @@ sections.Misc:AddButton({
         end
     end
 })
+local StolenStyleName
 sections.Misc:AddBox({
     enabled = true,
     focused = false,
@@ -1060,6 +1061,7 @@ sections.Combat:AddSlider({
         end
     end
 })
+
 player.CharacterAdded:Connect(function(newChar)
     task.wait(0.5)
     character = newChar
