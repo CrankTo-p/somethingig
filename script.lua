@@ -124,35 +124,6 @@ local connections = {
 }
 
 local standConnections = {}
-
--- ========================================
--- TRACKED ITEMS
--- ========================================
-getgenv().TrackedItems = {
-    "The Arrow.",
-    "Stone Mask.",
-    "Stone Mask With Super Aja",
-    "Forced Ripple Breathing",
-    "Rewind",
-}
-
--- ========================================
--- COOLDOWN DATA
--- ========================================
-local cooldowns = {
-    ["Fisticuffs"] = 1.4,
-    ["Barrage"] = 10,
-    ["Fisticuffs Barrage"] = 13.2,
-    ["KickBarrage"] = 20,
-    ["Timestop"] = 150,
-    ["QuickTimestop"] = 3,
-    ["RoundhouseKick"] = 15,
-    ["Chop"] = 5,
-    ["SYOPunch"] = 35,
-    ["Sunlight Yellow Overdrive"] = 85,
-    ["GratefulGrab"] = 45
-}
-
 -- ========================================
 -- INVENTORY LOCATIONS
 -- ========================================
@@ -168,7 +139,7 @@ local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/drill
 library:init()
 
 local Window = library.NewWindow({
-    title = "JJBADL Paid Script",
+    title = "JJBAD Paid Script",
     size = UDim2.new(0, 525, 0, 650)
 })
 
@@ -192,163 +163,8 @@ local sections = {
 }
 
 -- ========================================
--- HELPER FUNCTIONS
--- ========================================
-local function CreateDrawing(type, props)
-    local drawing = Drawing.new(type)
-    for prop, value in pairs(props) do
-        drawing[prop] = value
-    end
-    return drawing
-end
-
-local function UpdateESP(esp)
-    local player = esp.Player
-    if not player or not player.Character then return end
-    
-    local character = player.Character
-    local humanoid = character:FindFirstChild("Humanoid")
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    
-    if not humanoid or humanoid.Health <= 0 or not rootPart then
-        esp.Box.Visible = false
-        esp.Tracer.Visible = false
-        esp.HealthBar.Visible = false
-        esp.NameLabel.Visible = false
-        return
-    end
-    
-    local position, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
-    if onScreen then
-        local headPos = Camera:WorldToViewportPoint(character.Head.Position)
-        local distance = (Vector2.new(position.X, position.Y) - Vector2.new(headPos.X, headPos.Y)).magnitude
-        local boxSize = Vector2.new(math.clamp(distance * 2, 10, 100), math.clamp(distance * 3, 15, 150))
-        
-        esp.Box.PointA = Vector2.new(position.X - boxSize.X/2, position.Y - boxSize.Y/2)
-        esp.Box.PointB = Vector2.new(position.X + boxSize.X/2, position.Y - boxSize.Y/2)
-        esp.Box.PointC = Vector2.new(position.X + boxSize.X/2, position.Y + boxSize.Y/2)
-        esp.Box.PointD = Vector2.new(position.X - boxSize.X/2, position.Y + boxSize.Y/2)
-        
-        esp.HealthBar.From = Vector2.new(position.X - boxSize.X/2 - 5, position.Y + boxSize.Y/2)
-        esp.HealthBar.To = Vector2.new(position.X - boxSize.X/2 - 5, position.Y - boxSize.Y/2)
-        
-        local healthPercent = humanoid.Health / humanoid.MaxHealth
-        esp.HealthFill.From = esp.HealthBar.From
-        esp.HealthFill.To = Vector2.new(esp.HealthBar.From.X, esp.HealthBar.To.Y + (boxSize.Y * (1 - healthPercent)))
-        esp.HealthFill.Color = Color3.new(1 - healthPercent, healthPercent, 0)
-        
-        esp.NameLabel.Position = Vector2.new(position.X, position.Y - boxSize.Y/2 - 15)
-        esp.NameLabel.Text = player.Name
-        
-        if Settings.Tracers then
-            local origin = Settings.FollowMouse and Vector2.new(Mouse.X, Mouse.Y + 36) or 
-                          Settings.TracerOrigin == "Middle" and Camera.ViewportSize/2 or
-                          Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-            
-            esp.Tracer.From = origin
-            esp.Tracer.To = Vector2.new(position.X, position.Y + boxSize.Y/2)
-        end
-        
-        local color = TeamSettings.Enabled and (player.Team == LocalPlayer.Team and TeamSettings.AllyColor or TeamSettings.EnemyColor) or
-                     player.TeamColor.Color
-        
-        esp.Box.Color = color
-        esp.Tracer.Color = color
-        esp.NameLabel.Color = color
-        
-        esp.Box.Visible = true
-        esp.Tracer.Visible = Settings.Tracers
-        esp.HealthBar.Visible = true
-        esp.HealthFill.Visible = true
-        esp.NameLabel.Visible = true
-    else
-        esp.Box.Visible = false
-        esp.Tracer.Visible = false
-        esp.HealthBar.Visible = false
-        esp.HealthFill.Visible = false
-        esp.NameLabel.Visible = false
-    end
-end
-
--- ========================================
 -- COMBAT SECTION
 -- ========================================
-
-sections.Combat:AddToggle({
-    enabled = true,
-    text = "Cooldown Renamer",
-    flag = "Toggle_Cooldown",
-    risky = false,
-    callback = function(state)
-        if state then
-            local function handleToolActivation(tool)
-                if activeCooldowns[tool] then return end
-                
-                local originalName = tool.Name
-                originalNames[tool] = originalName
-                local cooldownDuration = cooldowns[originalName]
-                
-                activeCooldowns[tool] = RunService.Heartbeat:Connect(function(delta)
-                    if not tool.Parent then
-                        activeCooldowns[tool]:Disconnect()
-                        activeCooldowns[tool] = nil
-                        return
-                    end
-                    
-                    cooldownDuration = cooldownDuration - delta
-                    if cooldownDuration <= 0 then
-                        tool.Name = originalName
-                        activeCooldowns[tool]:Disconnect()
-                        activeCooldowns[tool] = nil
-                    else
-                        tool.Name = originalName..": "..string.format("%.1f", cooldownDuration)
-                    end
-                end)
-            end
-
-            local function handleCharacter(character)
-                local function onToolAdded(tool)
-                    if tool:IsA("Tool") and cooldowns[tool.Name] then
-                        local activationConnection = tool.Activated:Connect(function()
-                            handleToolActivation(tool)
-                        end)
-                        table.insert(connections.tools, activationConnection)
-                    end
-                end
-                
-                for _, tool in pairs(character:GetChildren()) do
-                    onToolAdded(tool)
-                end
-                
-                connections.toolAdded = character.ChildAdded:Connect(onToolAdded)
-            end
-            
-            handleCharacter(character)
-            connections.character = player.CharacterAdded:Connect(handleCharacter)
-        else
-            if connections.character then
-                connections.character:Disconnect()
-                connections.character = nil
-            end
-            if connections.toolAdded then
-                connections.toolAdded:Disconnect()
-                connections.toolAdded = nil
-            end
-            for _, conn in ipairs(connections.tools) do
-                conn:Disconnect()
-            end
-            connections.tools = {}
-            
-            for tool, conn in pairs(activeCooldowns) do
-                conn:Disconnect()
-                if tool.Parent and originalNames[tool] then
-                    tool.Name = originalNames[tool]
-                end
-            end
-            activeCooldowns = {}
-        end
-    end
-})
 
 sections.Combat:AddToggle({
     enabled = true,
@@ -432,72 +248,6 @@ sections.Combat:AddToggle({
                 for _, conn in ipairs(tbl) do conn:Disconnect() end
                 tbl = {}
             end
-        end
-    end
-})
-
-sections.Combat:AddToggle({
-    enabled = true,
-    text = "Infinite RC Range",
-    flag = "RC_Range_Toggle",
-    tooltip = "Bypasses stand control distance limitations",
-    risky = false,
-    callback = function(state)
-        if state then
-            local fakePosition = Instance.new("BodyPosition")
-            local fakeGyro = Instance.new("BodyGyro")
-            local originalIndex
-            
-            originalIndex = hookmetamethod(game, "__index", function(t, k)
-                if tostring(t) == "VoidBallRC" and k == "Value" then
-                    return true
-                end
-                return originalIndex(t, k)
-            end)
-
-            local conn = RunService.Stepped:Connect(function()
-                local char = player.Character
-                if not char then return end
-                
-                local stand = workspace.Stands:FindFirstChild(player.Name)
-                if stand and stand:FindFirstChild("HumanoidRootPart") then
-                    local root = stand.HumanoidRootPart
-                    
-                    if not root:FindFirstChild("RobloxRootGyro") then
-                        fakePosition.Name = "RCExploit"
-                        fakeGyro.Name = "RobloxRootGyro"
-                        fakePosition.Parent = root
-                        fakeGyro.Parent = root
-                        fakePosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        fakeGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    end
-                    
-                    local targetPos = char.HumanoidRootPart.Position + (root.Position - char.HumanoidRootPart.Position).Unit * 10
-                    fakePosition.Position = targetPos
-                    fakeGyro.CFrame = CFrame.lookAt(root.Position, targetPos)
-                end
-            end)
-
-            game.ReplicatedStorage.Network.RemoteControlEvent:FireServer()
-            
-            coroutine.wrap(function()
-                while library.flags.RC_Range_Toggle do
-                    if player.Character:FindFirstChild("Status") then
-                        local status = player.Character.Status
-                        if status:FindFirstChild("RemoteControl") then
-                            game.ReplicatedStorage.Network.UpdateStand:FireServer({
-                                Position = fakePosition.Position,
-                                Velocity = Vector3.new(0, -0.1, 0)
-                            })
-                        end
-                    end
-                    task.wait(0.1)
-                end
-                fakePosition:Destroy()
-                fakeGyro:Destroy()
-                hookmetamethod(game, "__index", originalIndex)
-                conn:Disconnect()
-            end)()
         end
     end
 })
@@ -739,72 +489,6 @@ sections.Combat:AddToggle({
         end
     end
 })
-
-local combatTagConnection = nil
-local timerConnection = nil
-local tagRemovedConnection = nil
-local displayLabel = nil
-
-sections.Combat:AddToggle({
-    enabled = true,
-    text = "Show Combat Tag Timer",
-    flag = "CombatTagTimer_Toggle",
-    callback = function(state)
-        if state then
-            local function createDisplay(combatTag)
-                if displayLabel then displayLabel:Destroy() end
-                
-                displayLabel = Instance.new("TextLabel")
-                displayLabel.Text = "Combat Timer: 0"
-                displayLabel.TextColor3 = Color3.new(1, 0, 0)
-                displayLabel.BackgroundTransparency = 1
-                displayLabel.Size = UDim2.new(0, 200, 0, 30)
-                displayLabel.Position = UDim2.new(0.5, -100, 0, 35)
-                displayLabel.Parent = player.PlayerGui:FindFirstChild("MAINNGUI")
-                
-                tagRemovedConnection = combatTag.Destroying:Connect(function()
-                    if displayLabel then
-                        displayLabel:Destroy()
-                        displayLabel = nil
-                    end
-                    if timerConnection then
-                        timerConnection:Disconnect()
-                        timerConnection = nil
-                    end
-                end)
-            end
-
-            combatTagConnection = player.ChildAdded:Connect(function(child)
-                if child.Name == "CombatTag" then
-                    createDisplay(child)
-                    local timer = child:WaitForChild("Timer")
-                    timerConnection = timer.Changed:Connect(function(value)
-                        displayLabel.Text = string.format("Combat Timer: %.1f", value)
-                    end)
-                end
-            end)
-
-            local existingTag = player:FindFirstChild("CombatTag")
-            if existingTag then
-                createDisplay(existingTag)
-                local timer = existingTag:WaitForChild("Timer")
-                timerConnection = timer.Changed:Connect(function(value)
-                    displayLabel.Text = string.format("Combat Timer: %.1f", value)
-                end)
-            end
-        else
-            if combatTagConnection then combatTagConnection:Disconnect() end
-            if timerConnection then timerConnection:Disconnect() end
-            if tagRemovedConnection then tagRemovedConnection:Disconnect() end
-            if displayLabel then displayLabel:Destroy() end
-            combatTagConnection = nil
-            timerConnection = nil
-            tagRemovedConnection = nil
-            displayLabel = nil
-        end
-    end
-})
-
 -- ========================================
 -- MISC SECTION
 -- ========================================
@@ -952,6 +636,59 @@ sections.Misc:AddButton({
         end
     end
 })
+sections.Misc:AddBox({
+    enabled = true,
+    focused = false,
+    text = "Style_Name",
+    input = "Vampire",
+    flag = "Disc_Style_Input",
+    callback = function(v)
+        StolenStyleName = v
+    end
+})
+
+sections.Misc:AddButton({
+    enabled = true,
+    text = "Set Disc Style",
+    flag = "Disc_Set_Style",
+    tooltip = "Set's a disc's style and exp values",
+    risky = false,
+    confirm = false,
+    callback = function()
+        if StolenStyleName == "" then
+            library:SendNotification("Please enter a stand name!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        
+        local Disc = character:FindFirstChildOfClass('Tool')
+        if Disc and Disc:FindFirstChild('DiscType') then
+            ValChange:FireServer(Disc.StolenAttributes.StolenStyleBool, true)
+            ValChange:FireServer(Disc.StolenAttributes.StolenStyleExp, 10000000000)
+            ValChange:FireServer(Disc.DiscType, StolenStyleName)
+
+            ValChange:FireServer(Disc.CommandType, 'None')
+            library:SendNotification("Disc set to: " .. StolenStyleName, 3, Color3.new(0, 1, 0))
+        else
+            library:SendNotification("No disc equipped!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
+sections.Misc:AddButton({
+    enabled = true,
+    text = "Set Yen",
+    flag = "Yen_Set",
+    tooltip = "Set's a Yen Tool In the Character to 15000",
+    risky = false,
+    confirm = false,
+    callback = function()
+        local Yen = character:FindFirstChildOfClass('Tool')
+        if Yen and Yen:FindFirstChild('YenAmount') then
+            ValChange:FireServer(Yen.YenAmount, 15000)
+        else
+            library:SendNotification("No Yen equipped!", 3, Color3.new(1, 0, 0))
+        end
+    end
+})
 sections.Misc:AddToggle({
     enabled = true,
     text = "Stand Visibility",
@@ -978,88 +715,144 @@ sections.Misc:AddToggle({
         end
     end
 })
+local JoinConn
+local streamerModeActive = false
+local nameConnection = nil
+local leaderboardConnection = nil
+local originalClothes = {}
+local originalColors = {}
 
 sections.Misc:AddToggle({
     enabled = true,
-    text = "Monitor Targets",
-    flag = "Toggle_ChatLog",
+    text = "Streamer Mode",
+    flag = "StreamerMode_Toggle",
+    tooltip = "Hides leaderboard and changes name display",
     risky = false,
     callback = function(state)
+        streamerModeActive = state
+        
         if state then
-            local targetNames = {
-                ["spyro_smiles"] = true,
-                ["jerimiahbatres"] = true,
-                ["pudim_louco"] = true
-            }
-
-            local function handlePlayer(player)
-                if targetNames[player.Name:lower()] then
-                    local connection = player.Chatted:Connect(function(message)
-                        print(string.format("[%s]: %s", player.Name, message))
-                        if player.Name:lower() == "spyro_smiles" or player.Name:lower() == "pudim_louco" then
-                            library:SendNotification(string.format("%s: %s", player.Name, message), 5, Color3.new(1, 0, 0))
+            local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
+            if leaderboard then
+                leaderboard.Enabled = false
+                
+                leaderboardConnection = leaderboard:GetPropertyChangedSignal("Enabled"):Connect(function()
+                    if streamerModeActive then
+                        leaderboard.Enabled = false
+                    end
+                end)
+            end
+            
+            local mainGui = gui:FindFirstChild("MAINNGUI")
+            if mainGui and mainGui:FindFirstChild("Information") then
+                local nameLabel = mainGui.Information:FindFirstChild("Name")
+                if nameLabel then
+                    nameLabel.Text = "Zikiouh"
+                    
+                    nameConnection = nameLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                        if streamerModeActive and nameLabel.Text ~= "Zikiouh" then
+                            nameLabel.Text = "Zikiouh"
                         end
                     end)
-                    table.insert(connections.players, connection)
                 end
             end
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                handlePlayer(player)
-            end
-
-            connections.newPlayer = Players.PlayerAdded:Connect(handlePlayer)
-        else
-            if connections.newPlayer then
-                connections.newPlayer:Disconnect()
-            end
-            for _, conn in ipairs(connections.players) do
-                conn:Disconnect()
-            end
-            connections.players = {}
-        end
-    end
-})
-
-sections.Misc:AddToggle({
-    enabled = true,
-    text = "AntiDrown",
-    flag = "Ocean_Touch_Toggle",
-    tooltip = "Removes touch interests in order to remove drowning",
-    risky = false,
-    callback = function(state)
-        if state then
-            local connection
             
-            local function sanitizePart(part)
-                if part:IsA("BasePart") then
-                    for _, child in ipairs(part:GetChildren()) do
-                        if child:IsA("TouchTransmitter") then
-                            child:Destroy()
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character then
+                    local char = plr.Character
+                    originalClothes[plr] = {}
+                    originalColors[plr] = {}
+                    
+                    for _, item in pairs(char:GetChildren()) do
+                        if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
+                            table.insert(originalClothes[plr], item:Clone())
+                            item:Destroy()
+                        end
+                    end
+                    
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                            originalColors[plr][part] = part.Color
+                            part.Color = Color3.fromRGB(163, 162, 165)
                         end
                     end
                 end
             end
             
-            connection = ocean.ChildAdded:Connect(function(child)
-                sanitizePart(child)
+            connections.streamerCharAdded = Players.PlayerAdded:Connect(function(plr)
+                plr.CharacterAdded:Connect(function(char)
+                    if streamerModeActive and plr ~= player then
+                        task.wait(0.5)
+                        for _, item in pairs(char:GetChildren()) do
+                            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
+                                item:Destroy()
+                            end
+                        end
+                        
+                        for _, part in pairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                                part.Color = Color3.fromRGB(163, 162, 165)
+                            end
+                        end
+                    end
+                end)
             end)
             
-            task.spawn(function()
-                while library.flags.Ocean_Touch_Toggle do
-                    for _, child in ipairs(ocean:GetChildren()) do
-                        sanitizePart(child)
-                    end
-                    task.wait(0.25)
+            library:SendNotification("Streamer Mode enabled!", 3, Color3.new(0, 1, 0))
+        else
+            local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
+            if leaderboard then
+                leaderboard.Enabled = true
+            end
+            
+            if leaderboardConnection then
+                leaderboardConnection:Disconnect()
+                leaderboardConnection = nil
+            end
+            
+            if nameConnection then
+                nameConnection:Disconnect()
+                nameConnection = nil
+            end
+            
+            if connections.streamerCharAdded then
+                connections.streamerCharAdded:Disconnect()
+                connections.streamerCharAdded = nil
+            end
+            
+            local mainGui = gui:FindFirstChild("MAINNGUI")
+            if mainGui and mainGui:FindFirstChild("Information") then
+                local nameLabel = mainGui.Information:FindFirstChild("Name")
+                if nameLabel then
+                    nameLabel.Text = player.Name
                 end
-                connection:Disconnect()
-            end)
+            end
+            
+            for plr, clothes in pairs(originalClothes) do
+                if plr.Character then
+                    for _, item in pairs(clothes) do
+                        item:Clone().Parent = plr.Character
+                    end
+                end
+            end
+            
+            for plr, colors in pairs(originalColors) do
+                if plr.Character then
+                    for part, color in pairs(colors) do
+                        if part and part.Parent then
+                            part.Color = color
+                        end
+                    end
+                end
+            end
+            
+            originalClothes = {}
+            originalColors = {}
+            
+            library:SendNotification("Streamer Mode disabled!", 3, Color3.new(1, 1, 0))
         end
     end
 })
-
-local JoinConn
-
 sections.Misc:AddToggle({
     enabled = true,
     text = 'Join Notifications',
@@ -1189,145 +982,6 @@ sections.Misc:AddButton({
 -- ESP SECTION
 -- ========================================
 
-sections.ESPSection:AddToggle({
-    enabled = true,
-    text = "ESP",
-    flag = "ToggleESP",
-    risky = false,
-    callback = function(state)
-        if state then
-            local function CreateESP(player)
-                if ESPTable[player] or player == LocalPlayer then return end
-                
-                ESPTable[player] = {
-                    Box = CreateDrawing("Quad", {
-                        Thickness = Settings.BoxThickness,
-                        Color = Settings.BoxColor,
-                        Filled = false,
-                        Transparency = 1
-                    }),
-                    Tracer = CreateDrawing("Line", {
-                        Thickness = Settings.TracerThickness,
-                        Color = Settings.TracerColor,
-                        Transparency = 1
-                    }),
-                    HealthBar = CreateDrawing("Line", {
-                        Thickness = 3,
-                        Color = Color3.new(0, 0, 0),
-                        Transparency = 1
-                    }),
-                    HealthFill = CreateDrawing("Line", {
-                        Thickness = 1.5,
-                        Color = Color3.new(0, 1, 0),
-                        Transparency = 1
-                    }),
-                    NameLabel = CreateDrawing("Text", {
-                        Text = "",
-                        Size = 13,
-                        Outline = true,
-                        Center = true,
-                        Transparency = 1
-                    }),
-                    Player = player
-                }
-            end
-
-            connections.espAdded = Players.PlayerAdded:Connect(CreateESP)
-            connections.espRemoved = Players.PlayerRemoving:Connect(function(p)
-                if ESPTable[p] then
-                    for _, v in pairs(ESPTable[p]) do
-                        if v.Remove then v:Remove() end
-                    end
-                    ESPTable[p] = nil
-                end
-            end)
-
-            connections.espUpdate = RunService.RenderStepped:Connect(function()
-                for _, esp in pairs(ESPTable) do
-                    UpdateESP(esp)
-                end
-            end)
-
-            for _, p in ipairs(Players:GetPlayers()) do
-                CreateESP(p)
-            end
-        else
-            for _, esp in pairs(ESPTable) do
-                for _, v in pairs(esp) do
-                    if v.Remove then v:Remove() end
-                end
-            end
-            ESPTable = {}
-            
-            for _, conn in pairs(connections) do
-                if conn.Disconnect then conn:Disconnect() end
-            end
-        end
-    end
-})
-
-sections.ESPSection:AddButton({
-    enabled = true,
-    text = "Valuables ESP",
-    flag = "ESPButton",
-    risky = false,
-    confirm = false,
-    callback = function()
-        valuableEspActive = not valuableEspActive
-        
-        if valuableEspActive then
-            local function highlightTool(item)
-                local toolName = item.Name
-                local isTarget = (item:IsA("Tool") and 
-                    (toolName == "The Arrow." or 
-                     toolName == "Stone Mask." or 
-                     string.find(toolName, "Yen"))) or 
-                    (toolName == "LootBag" and item.Parent == workspace)
-
-                if not isTarget then return end
-
-                local highlight = Instance.new("Highlight")
-                highlight.Parent = item
-                local bbg = Instance.new("BillboardGui")
-                bbg.AlwaysOnTop = true
-                bbg.Size = UDim2.new(0, 100, 0, 30)
-                bbg.StudsOffset = Vector3.new(0, 2, 0)
-                bbg.Parent = item
-
-                local text = Instance.new("TextLabel")
-                text.Size = bbg.Size
-                text.TextSize = 15
-                text.BackgroundTransparency = 1
-                text.Text = item.Name
-                text.Parent = bbg
-
-                valuableHighlights[item] = {Highlight = highlight, Billboard = bbg}
-            end
-
-            connections.valuablesAdded = workspace.ChildAdded:Connect(function(child)
-                highlightTool(child)
-            end)
-
-            for _, item in pairs(workspace:GetDescendants()) do
-                highlightTool(item)
-            end
-        else
-            for item, objects in pairs(valuableHighlights) do
-                if objects.Highlight then
-                    objects.Highlight:Destroy()
-                end
-                if objects.Billboard then
-                    objects.Billboard:Destroy()
-                end
-            end
-            valuableHighlights = {}
-            if connections.valuablesAdded then
-                connections.valuablesAdded:Disconnect()
-            end
-        end
-    end
-})
-
 local hitboxTransparency = 0.96
 
 sections.ESPSection:AddSlider({
@@ -1406,7 +1060,6 @@ sections.Combat:AddSlider({
         end
     end
 })
-
 player.CharacterAdded:Connect(function(newChar)
     task.wait(0.5)
     character = newChar
@@ -1504,59 +1157,6 @@ sections.ESPSection:AddToggle({
         end
     end
 })
-
--- ========================================
--- VISUAL SECTION
--- ========================================
-
-sections.Visual:AddToggle({
-    enabled = true,
-    text = "AntiBlindness",
-    flag = "AntiBlindness_Toggle",
-    tooltip = "Disables blindness/drowning visual effects",
-    risky = false,
-    callback = function(state)
-        if state then
-            local function disableUI(obj)
-                if obj:IsA("ScreenGui") then
-                    obj.Enabled = false
-                    connections[#connections+1] = obj:GetPropertyChangedSignal("Enabled"):Connect(function()
-                        obj.Enabled = false
-                    end)
-                end
-            end
-            
-            connections[#connections+1] = gui.ChildAdded:Connect(function(child)
-                if child.Name == "DrowningUI" then
-                    disableUI(child)
-                end
-            end)
-            
-            for _, v in ipairs({"BlindnessGUI", "HalfBlindnessGUI", "BTDBlindness"}) do
-                local ui = gui:FindFirstChild(v)
-                if ui then
-                    disableUI(ui)
-                    connections[#connections+1] = ui:GetPropertyChangedSignal("Enabled"):Connect(function()
-                        ui.Enabled = false
-                    end)
-                end
-            end
-            
-            task.spawn(function()
-                while library.flags.AntiBlindness_Toggle do
-                    if gui:FindFirstChild("DrowningUI") then
-                        gui.DrowningUI.Enabled = false
-                    end
-                    task.wait()
-                end
-                for _, conn in pairs(connections) do
-                    conn:Disconnect()
-                end
-            end)
-        end
-    end
-})
-
 -- ========================================
 -- CHARACTER RESPAWN HANDLER
 -- ========================================
@@ -2075,11 +1675,13 @@ sections.Combat:AddButton({
 
             local Electricity = Instance.new("NumberValue", atts)
             local Liquid = Instance.new("NumberValue", atts)
+            local TowerSpeed = Instance.new("NumberValue", atts)
             Liquid.Value = 10000
             Electricity.Value = 10000
+            TowerSpeed.Name = 'TowerSpeed'
             Electricity.Name = 'Electricity'
             Liquid.Name = 'Liquid'
-            game.Lighting.Raining.Value = true
+            game.Lighting.Raining = true
             library:SendNotification("Stand speed maximized!", 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("Stand or Attributes not found!", 3, Color3.new(1, 0, 0))
@@ -2233,6 +1835,87 @@ sections.Combat:AddToggle({
                 conn:Disconnect()
             end
             ammoConnections = {}
+        end
+    end
+})
+local moderatorIds = {
+    1299387765, 2232457771, 2307801292, 1909757624, 3445752716,
+    4550728214, 5680333301, 50203403, 1708981366, 399667054,
+    1445187684, 61376390, 243776147, 987524554, 1402882528,
+    734299965, 1237808459, 128503556
+}
+
+local modDetectorConnection = nil
+
+sections.Misc:AddToggle({
+    enabled = true,
+    text = 'Moderator Detector',
+    flag = 'ModDetector',
+    tooltip = 'Notifies when a moderator joins',
+    risky = false,
+    callback = function(state)
+        if state then
+            for _, plr in pairs(Players:GetPlayers()) do
+                if table.find(moderatorIds, plr.UserId) then
+                    library:SendNotification("⚠️ MODERATOR DETECTED: " .. plr.Name, 10, Color3.new(1, 0, 0))
+                end
+            end
+            
+            modDetectorConnection = Players.PlayerAdded:Connect(function(plr)
+                if table.find(moderatorIds, plr.UserId) then
+                    library:SendNotification("⚠️ MODERATOR JOINED: " .. plr.Name, 10, Color3.new(1, 0, 0))
+                end
+            end)
+        else
+            if modDetectorConnection then
+                modDetectorConnection:Disconnect()
+                modDetectorConnection = nil
+            end
+        end
+    end
+})
+
+local modKickConnection = nil
+
+sections.Misc:AddToggle({
+    enabled = true,
+    text = 'Moderator Detector Kick',
+    flag = 'ModDetectorKick',
+    tooltip = 'Automatically kicks you when a moderator is detected',
+    risky = true,
+    callback = function(state)
+        if state then
+            for _, plr in pairs(Players:GetPlayers()) do
+                if table.find(moderatorIds, plr.UserId) then
+                    if LocalPlayer:FindFirstChild('CombatTag') then
+                        local Timer = LocalPlayer.CombatTag:WaitForChild('Timer')
+                        ValChange:FireServer(Timer, 0)
+                        task.wait(0.5)
+                    end
+                    
+                    LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
+                    return
+                end
+            end
+            
+            modKickConnection = Players.PlayerAdded:Connect(function(plr)
+                if table.find(moderatorIds, plr.UserId) then
+                    library:SendNotification("⚠️ MODERATOR DETECTED - KICKING!", 3, Color3.new(1, 0, 0))
+                    
+                    if LocalPlayer:FindFirstChild('CombatTag') then
+                        local Timer = LocalPlayer.CombatTag:WaitForChild('Timer')
+                        ValChange:FireServer(Timer, 0)
+                        task.wait(0.5)
+                    end
+                    
+                    LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
+                end
+            end)
+        else
+            if modKickConnection then
+                modKickConnection:Disconnect()
+                modKickConnection = nil
+            end
         end
     end
 })
