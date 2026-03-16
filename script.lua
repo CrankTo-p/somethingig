@@ -123,8 +123,9 @@ local sections = {
 
 local function safeFireServer(remote, ...)
     if not remote then return end
+    local args = table.pack(...)
     local ok, err = pcall(function()
-        remote:FireServer(...)
+        remote:FireServer(table.unpack(args, 1, args.n))
     end)
     if not ok then
         warn("FireServer failed: " .. tostring(err))
