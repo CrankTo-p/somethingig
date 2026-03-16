@@ -1,6 +1,3 @@
--- ========================================
--- CONFIGURATION
--- ========================================
 getgenv().Config = {
     Invite = "informant.wtf",
     Version = "0.0",
@@ -10,44 +7,26 @@ getgenv().luaguardvars = {
     DiscordName = "zikiouh#0000",
 }
 
--- ========================================
--- SERVICES
--- ========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- ========================================
--- PLAYER REFERENCES
--- ========================================
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 local gui = LocalPlayer:WaitForChild("PlayerGui")
 
--- ========================================
--- CHARACTER REFERENCES
--- ========================================
 local player = LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local root = character:WaitForChild("HumanoidRootPart")
 
--- ========================================
--- WORKSPACE REFERENCES
--- ========================================
-local ocean = workspace.Map.Ocean
+local ocean = workspace.Map and workspace.Map:FindFirstChild("Ocean")
 local Projectiles = workspace:FindFirstChild("Projectiles")
 
--- ========================================
--- NETWORK REFERENCES
--- ========================================
-local Network = game.ReplicatedStorage.Network.Running
-local ValChange = game.ReplicatedStorage.Network.HamonCharge
+local Network = game.ReplicatedStorage:FindFirstChild("Network") and game.ReplicatedStorage.Network:FindFirstChild("Running")
+local ValChange = game.ReplicatedStorage:FindFirstChild("Network") and game.ReplicatedStorage.Network:FindFirstChild("HamonCharge")
 
--- ========================================
--- STATE VARIABLES
--- ========================================
 local activeCooldowns = {}
 local originalNames = {}
 local findings = {}
@@ -64,9 +43,6 @@ local standNoClipActive = false
 local Noclipping = false
 local Clip = true
 
--- ========================================
--- MOVEMENT VARIABLES
--- ========================================
 local walkspeedCheat = false
 local walkspeedRunning = false
 local currentWalkspeed = 16
@@ -78,9 +54,6 @@ local currentJumppower = 50
 local infiniteJumpEnabled = false
 local infiniteJumpConnection = nil
 
--- ========================================
--- ESP SETTINGS
--- ========================================
 local Settings = {
     BoxColor = Color3.fromRGB(255, 0, 0),
     TracerColor = Color3.fromRGB(255, 0, 0),
@@ -97,9 +70,6 @@ local TeamSettings = {
     EnemyColor = Color3.fromRGB(255, 0, 0)
 }
 
--- ========================================
--- CONNECTIONS STORAGE
--- ========================================
 local connections = {
     players = {},
     projectiles = {},
@@ -124,17 +94,12 @@ local connections = {
 }
 
 local standConnections = {}
--- ========================================
--- INVENTORY LOCATIONS
--- ========================================
+
 local inventoryLocations = {
     player:FindFirstChild("Backpack"),
     player.Character
 }
 
--- ========================================
--- UI LIBRARY INITIALIZATION
--- ========================================
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/Informantsadasdsad/refs/heads/main/informant.wtf%20Lib%20Source.lua"))()
 library:init()
 
@@ -143,18 +108,12 @@ local Window = library.NewWindow({
     size = UDim2.new(0, 525, 0, 650)
 })
 
--- ========================================
--- TABS
--- ========================================
 local tabs = {
     MainTab = Window:AddTab("Main"),
     ESPTab = Window:AddTab("Esp"),
     Settings = library:CreateSettingsTab(Window),
 }
 
--- ========================================
--- SECTIONS
--- ========================================
 local sections = {
     Combat = tabs.MainTab:AddSection("Combat", 1),
     Misc = tabs.MainTab:AddSection("Misc", 2),
@@ -162,9 +121,34 @@ local sections = {
     ESPSection = tabs.ESPTab:AddSection("ESP", 1),
 }
 
--- ========================================
--- COMBAT SECTION
--- ========================================
+local function safeFireServer(remote, ...)
+    if not remote then return end
+    local ok, err = pcall(function()
+        remote:FireServer(...)
+    end)
+    if not ok then
+        warn("FireServer failed: " .. tostring(err))
+    end
+end
+
+local function getCharacter()
+    return player.Character
+end
+
+local function getHumanoid()
+    local char = getCharacter()
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRoot()
+    local char = getCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getPlayerStand()
+    local standsFolder = workspace:FindFirstChild("Stands")
+    return standsFolder and standsFolder:FindFirstChild(player.Name)
+end
 
 sections.Combat:AddToggle({
     enabled = true,
@@ -174,87 +158,110 @@ sections.Combat:AddToggle({
     callback = function(state)
         if state then
             local function handleInstance(instance)
+                if not instance or not instance.Parent then return end
                 local function removeTouch(descendant)
-                    if descendant:IsA("TouchTransmitter") then descendant:Destroy() end
+                    if descendant and descendant:IsA("TouchTransmitter") then
+                        pcall(function() descendant:Destroy() end)
+                    end
                 end
-                for _, d in ipairs(instance:GetDescendants()) do removeTouch(d) end
-                return instance.DescendantAdded:Connect(removeTouch)
+                local ok, err = pcall(function()
+                    for _, d in ipairs(instance:GetDescendants()) do removeTouch(d) end
+                end)
+                if not ok then warn("handleInstance descendants error: " .. tostring(err)) end
+                local conn
+                ok, conn = pcall(function()
+                    return instance.DescendantAdded:Connect(removeTouch)
+                end)
+                if ok then return conn end
             end
 
             if Projectiles then
                 local function handleProjectile(projectile)
-                    table.insert(connections.projectiles, handleInstance(projectile))
+                    if not projectile then return end
+                    local conn = handleInstance(projectile)
+                    if conn then table.insert(connections.projectiles, conn) end
                 end
-                connections.projectileAdded = Projectiles.ChildAdded:Connect(handleProjectile)
-                for _, proj in ipairs(Projectiles:GetChildren()) do handleProjectile(proj) end
+                pcall(function()
+                    connections.projectileAdded = Projectiles.ChildAdded:Connect(handleProjectile)
+                    for _, proj in ipairs(Projectiles:GetChildren()) do handleProjectile(proj) end
+                end)
             end
 
             local function monitorStands()
                 local standsFolder = workspace:FindFirstChild("Stands")
-                if standsFolder then
-                    local function processStandChild(child)
-                        if child:IsA("BasePart") then
-                            table.insert(connections.stands, handleInstance(child))
-                        end
+                if not standsFolder then return end
+
+                local function processStandChild(child)
+                    if child and child:IsA("BasePart") then
+                        local conn = handleInstance(child)
+                        if conn then table.insert(connections.stands, conn) end
                     end
-                    
-                    local function handleFinger(finger)
-                        table.insert(connections.fingers, handleInstance(finger))
-                    end
-                    
+                end
+
+                local function handleFinger(finger)
+                    if not finger then return end
+                    local conn = handleInstance(finger)
+                    if conn then table.insert(connections.fingers, conn) end
+                end
+
+                pcall(function()
                     for _, stand in ipairs(standsFolder:GetChildren()) do
                         for _, child in ipairs(stand:GetDescendants()) do
                             processStandChild(child)
                             if child.Name == "Finger" then handleFinger(child) end
                         end
                         stand.ChildAdded:Connect(function(child)
-                            if child.Name == "Finger" then handleFinger(child) end
+                            if child and child.Name == "Finger" then handleFinger(child) end
                         end)
                     end
-                    
-                    connections.standDescendantAdded = standsFolder.DescendantAdded:Connect(function(child)
-                        processStandChild(child)
-                    end)
-                end
+                    connections.standDescendantAdded = standsFolder.DescendantAdded:Connect(processStandChild)
+                end)
             end
-            
+
             monitorStands()
-            connections.standsAdded = workspace.ChildAdded:Connect(function(child)
-                if child.Name == "Stands" then monitorStands() end
+            pcall(function()
+                connections.standsAdded = workspace.ChildAdded:Connect(function(child)
+                    if child and child.Name == "Stands" then monitorStands() end
+                end)
             end)
 
             local function genericHandler(pattern, storage)
                 return function(child)
-                    if string.find(child.Name:lower(), pattern) then
-                        table.insert(storage, handleInstance(child))
+                    if child and string.find(child.Name:lower(), pattern) then
+                        local conn = handleInstance(child)
+                        if conn then table.insert(storage, conn) end
                     end
                 end
             end
 
-            connections.landmineAdded = workspace.ChildAdded:Connect(genericHandler("landmine", connections.landmines))
-            connections.icicleAdded = workspace.ChildAdded:Connect(genericHandler("icicle", connections.icicles))
-            for _, child in ipairs(workspace:GetChildren()) do
-                genericHandler("landmine", connections.landmines)(child)
-                genericHandler("icicle", connections.icicles)(child)
-            end
+            pcall(function()
+                connections.landmineAdded = workspace.ChildAdded:Connect(genericHandler("landmine", connections.landmines))
+                connections.icicleAdded = workspace.ChildAdded:Connect(genericHandler("icicle", connections.icicles))
+                for _, child in ipairs(workspace:GetChildren()) do
+                    genericHandler("landmine", connections.landmines)(child)
+                    genericHandler("icicle", connections.icicles)(child)
+                end
+            end)
         else
-            if connections.projectileAdded then connections.projectileAdded:Disconnect() end
-            if connections.landmineAdded then connections.landmineAdded:Disconnect() end
-            if connections.icicleAdded then connections.icicleAdded:Disconnect() end
-            if connections.standsAdded then connections.standsAdded:Disconnect() end
-            if connections.standDescendantAdded then connections.standDescendantAdded:Disconnect() end
-            
-            for _, tbl in ipairs({connections.projectiles, connections.landmines, connections.icicles, connections.stands, connections.fingers}) do
-                for _, conn in ipairs(tbl) do conn:Disconnect() end
-                tbl = {}
-            end
+            pcall(function()
+                if connections.projectileAdded then connections.projectileAdded:Disconnect() end
+                if connections.landmineAdded then connections.landmineAdded:Disconnect() end
+                if connections.icicleAdded then connections.icicleAdded:Disconnect() end
+                if connections.standsAdded then connections.standsAdded:Disconnect() end
+                if connections.standDescendantAdded then connections.standDescendantAdded:Disconnect() end
+
+                for _, tbl in ipairs({connections.projectiles, connections.landmines, connections.icicles, connections.stands, connections.fingers}) do
+                    for _, conn in ipairs(tbl) do
+                        if conn then pcall(function() conn:Disconnect() end) end
+                    end
+                    for i = #tbl, 1, -1 do tbl[i] = nil end
+                end
+            end)
         end
     end
 })
 
-sections.Combat:AddSeparator({
-    text = "Movement Hacks"
-})
+sections.Combat:AddSeparator({ text = "Movement Hacks" })
 
 sections.Combat:AddToggle({
     enabled = true,
@@ -264,26 +271,28 @@ sections.Combat:AddToggle({
         walkspeedCheat = value
         if value then
             walkspeedRunning = true
-            spawn(function()
+            task.spawn(function()
                 while walkspeedRunning do
-                    if humanoid and walkspeedCheat then
-                        humanoid.WalkSpeed = currentWalkspeed
+                    local hum = getHumanoid()
+                    if hum and walkspeedCheat then
+                        pcall(function() hum.WalkSpeed = currentWalkspeed end)
                     end
                     task.wait(0.1)
                 end
             end)
         else
             walkspeedRunning = false
-            humanoid.WalkSpeed = 16
+            local hum = getHumanoid()
+            if hum then pcall(function() hum.WalkSpeed = 16 end) end
         end
     end
 })
 
 sections.Combat:AddSlider({
-    text = "Walkspeed", 
-    flag = 'Walkspeed_Value', 
+    text = "Walkspeed",
+    flag = "Walkspeed_Value",
     value = 16,
-    min = 16, 
+    min = 16,
     max = 200,
     callback = function(v)
         currentWalkspeed = v
@@ -298,26 +307,28 @@ sections.Combat:AddToggle({
         jumppowerCheat = value
         if value then
             jumppowerRunning = true
-            spawn(function()
+            task.spawn(function()
                 while jumppowerRunning do
-                    if humanoid and jumppowerCheat then
-                        humanoid.JumpPower = currentJumppower
+                    local hum = getHumanoid()
+                    if hum and jumppowerCheat then
+                        pcall(function() hum.JumpPower = currentJumppower end)
                     end
                     task.wait(0.1)
                 end
             end)
         else
             jumppowerRunning = false
-            humanoid.JumpPower = 50
+            local hum = getHumanoid()
+            if hum then pcall(function() hum.JumpPower = 50 end) end
         end
     end
 })
 
 sections.Combat:AddSlider({
-    text = "JumpPower", 
-    flag = 'Jumppower_Value', 
+    text = "JumpPower",
+    flag = "Jumppower_Value",
     value = 50,
-    min = 50, 
+    min = 50,
     max = 200,
     callback = function(v)
         currentJumppower = v
@@ -331,17 +342,21 @@ sections.Combat:AddToggle({
     callback = function(state)
         infiniteJumpEnabled = state
         if state then
-            infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
-                if player.Character and infiniteJumpEnabled then
-                    local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    if currentHumanoid and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Dead then
-                        currentHumanoid:ChangeState("Jumping")
+            pcall(function()
+                infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+                    if not infiniteJumpEnabled then return end
+                    local char = getCharacter()
+                    if char then
+                        local hum = char:FindFirstChildOfClass("Humanoid")
+                        if hum and hum:GetState() ~= Enum.HumanoidStateType.Dead then
+                            pcall(function() hum:ChangeState("Jumping") end)
+                        end
                     end
-                end
+                end)
             end)
         else
             if infiniteJumpConnection then
-                infiniteJumpConnection:Disconnect()
+                pcall(function() infiniteJumpConnection:Disconnect() end)
                 infiniteJumpConnection = nil
             end
         end
@@ -356,65 +371,57 @@ sections.Combat:AddToggle({
         if state then
             local conn
             local moveVector = Vector3.new()
-            local camera = workspace.CurrentCamera
-            
+            local cam = workspace.CurrentCamera
+
             local function updateVelocity()
-                if not player.Character then return end
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                
-                if root and humanoid then
-                    local cf = camera.CFrame
+                local r = getRoot()
+                local hum = getHumanoid()
+                if not r or not hum then return end
+                local ok, err = pcall(function()
+                    local cf = cam.CFrame
                     local speed = walkspeedCheat and currentWalkspeed or 16
-                    
                     local moveDir = Vector3.new(moveVector.X, 0, moveVector.Z).Unit
                     local relative = cf:VectorToWorldSpace(moveDir)
-                    local gravity = humanoid:GetState() == Enum.HumanoidStateType.Freefall and 0.8 or 1
-                    
-                    if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-                        root.Velocity = Vector3.new(
+                    local gravity = hum:GetState() == Enum.HumanoidStateType.Freefall and 0.8 or 1
+                    if hum:GetState() ~= Enum.HumanoidStateType.Running then
+                        r.Velocity = Vector3.new(
                             relative.X * speed * 2,
-                            root.Velocity.Y * gravity,
+                            r.Velocity.Y * gravity,
                             relative.Z * speed * 2
                         )
                     end
-                end
+                end)
+                if not ok then warn("AirControl velocity error: " .. tostring(err)) end
             end
 
-            conn = RunService.Heartbeat:Connect(updateVelocity)
-            
-            UserInputService.InputChanged:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Keyboard then
-                    local keys = {
-                        [Enum.KeyCode.W] = Vector3.new(0, 0, -1),
-                        [Enum.KeyCode.S] = Vector3.new(0, 0, 1),
-                        [Enum.KeyCode.A] = Vector3.new(-1, 0, 0),
-                        [Enum.KeyCode.D] = Vector3.new(1, 0, 0)
-                    }
-                    
-                    if keys[input.KeyCode] then
-                        moveVector = humanoid.MoveDirection + keys[input.KeyCode]
-                    end
-                end
-            end)
+            pcall(function()
+                conn = RunService.Heartbeat:Connect(updateVelocity)
 
-            player.CharacterAdded:Connect(function()
-                task.wait(0.5)
-                if player.Character then
-                    local newRoot = player.Character:FindFirstChild("HumanoidRootPart")
-                    local newHum = player.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    if newRoot and newHum then
-                        root = newRoot
-                        humanoid = newHum
+                UserInputService.InputChanged:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        local keys = {
+                            [Enum.KeyCode.W] = Vector3.new(0, 0, -1),
+                            [Enum.KeyCode.S] = Vector3.new(0, 0, 1),
+                            [Enum.KeyCode.A] = Vector3.new(-1, 0, 0),
+                            [Enum.KeyCode.D] = Vector3.new(1, 0, 0)
+                        }
+                        local hum = getHumanoid()
+                        if keys[input.KeyCode] and hum then
+                            moveVector = hum.MoveDirection + keys[input.KeyCode]
+                        end
                     end
-                end
-            end)
+                end)
 
-            getgenv().AirControlConnection = conn
+                player.CharacterAdded:Connect(function()
+                    task.wait(0.5)
+                end)
+
+                getgenv().AirControlConnection = conn
+            end)
         else
             if getgenv().AirControlConnection then
-                getgenv().AirControlConnection:Disconnect()
+                pcall(function() getgenv().AirControlConnection:Disconnect() end)
+                getgenv().AirControlConnection = nil
             end
         end
     end
@@ -428,135 +435,108 @@ sections.Combat:AddToggle({
         standNoClipActive = state
         if state then
             local function processPart(part)
-                if part:IsA("BasePart") then
+                if not part or not part:IsA("BasePart") then return end
+                pcall(function()
                     standParts[part] = standParts[part] or part.CanCollide
                     part.CanCollide = false
-                end
+                end)
             end
 
             local function handleStand(stand)
-                for _, child in ipairs(stand:GetDescendants()) do
-                    processPart(child)
-                    if child:IsA("Accessory") then
-                        for _, accessoryPart in ipairs(child:GetDescendants()) do
-                            processPart(accessoryPart)
+                if not stand then return end
+                pcall(function()
+                    for _, child in ipairs(stand:GetDescendants()) do
+                        processPart(child)
+                        if child:IsA("Accessory") then
+                            for _, ap in ipairs(child:GetDescendants()) do processPart(ap) end
                         end
                     end
-                end
 
-                standConnections.descendantAdded = stand.DescendantAdded:Connect(function(child)
-                    processPart(child)
-                    if child:IsA("Accessory") then
-                        standConnections[child] = child.DescendantAdded:Connect(processPart)
-                    end
-                end)
-
-                standConnections.destroying = stand.Destroying:Connect(function()
-                    for part in pairs(standParts) do
-                        if part.Parent == nil then
-                            standParts[part] = nil
-                        end
-                    end
-                end)
-            end
-
-            local heartbeatConnection = RunService.Heartbeat:Connect(function()
-                if not standNoClipActive then return end
-                local standsFolder = workspace:FindFirstChild("Stands")
-                local playerStand = standsFolder and standsFolder:FindFirstChild(player.Name)
-                if playerStand then
-                    for part in pairs(standParts) do
-                        if part.Parent then
-                            part.CanCollide = false
-                        end
-                    end
-                    if not standConnections.descendantAdded then
-                        handleStand(playerStand)
-                    end
-                end
-            end)
-        else
-            for part, canCollide in pairs(standParts) do
-                if part.Parent then
-                    part.CanCollide = canCollide
-                end
-            end
-            for _, connection in pairs(standConnections) do
-                connection:Disconnect()
-            end
-            standParts = {}
-            standConnections = {}
-        end
-    end
-})
--- ========================================
--- MISC SECTION
--- ========================================
-
-local StaminaLoop
-local ToChange = character.Stamina
-
-sections.Misc:AddToggle({
-    enabled = true,
-    text = 'Infinite Stamina',
-    flag = 'InfiniteStamina',
-    tooltip = 'Toggle infinite stamina',
-    risky = true,
-    callback = function(state)
-        if state then
-            StaminaLoop = RunService.Heartbeat:Connect(function()
-                task.wait(0.1)
-                ValChange:FireServer(ToChange, 1000000)
-            end)
-        else
-            if StaminaLoop then
-                StaminaLoop:Disconnect()
-                StaminaLoop = nil
-            end
-        end
-    end
-})
-
-local CombatConn = nil
-local TimerConn = nil
-
-sections.Misc:AddToggle({
-    enabled = true,
-    text = 'No Combat Tag',
-    flag = 'NoCombatTag',
-    tooltip = 'Removes combat tag instantly',
-    risky = true,
-    callback = function(state)
-        if state then
-            CombatConn = LocalPlayer.ChildAdded:Connect(function(child)
-                if child.Name == 'CombatTag' then
-                    local Timer = child:WaitForChild('Timer')
-                    ValChange:FireServer(Timer, 0)
-                    TimerConn = Timer.Changed:Connect(function(v)
-                        if v ~= 0 then
-                            ValChange:FireServer(Timer, 0)
+                    standConnections.descendantAdded = stand.DescendantAdded:Connect(function(child)
+                        processPart(child)
+                        if child:IsA("Accessory") then
+                            standConnections[child] = child.DescendantAdded:Connect(processPart)
                         end
                     end)
-                end
-            end)
-            if LocalPlayer:FindFirstChild('CombatTag') then
-                local Timer = LocalPlayer.CombatTag:WaitForChild('Timer')
-                ValChange:FireServer(Timer, 0)
-                TimerConn = Timer.Changed:Connect(function(v)
-                    if v ~= 0 then
-                        ValChange:FireServer(Timer, 0)
-                    end
+
+                    standConnections.destroying = stand.Destroying:Connect(function()
+                        for part in pairs(standParts) do
+                            if part.Parent == nil then standParts[part] = nil end
+                        end
+                    end)
                 end)
             end
+
+            pcall(function()
+                RunService.Heartbeat:Connect(function()
+                    if not standNoClipActive then return end
+                    local playerStand = getPlayerStand()
+                    if playerStand then
+                        for part in pairs(standParts) do
+                            if part and part.Parent then
+                                pcall(function() part.CanCollide = false end)
+                            end
+                        end
+                        if not standConnections.descendantAdded then
+                            handleStand(playerStand)
+                        end
+                    end
+                end)
+            end)
         else
-            if CombatConn then
-                CombatConn:Disconnect()
-                CombatConn = nil
+            pcall(function()
+                for part, canCollide in pairs(standParts) do
+                    if part and part.Parent then
+                        pcall(function() part.CanCollide = canCollide end)
+                    end
+                end
+                for _, connection in pairs(standConnections) do
+                    if connection then pcall(function() connection:Disconnect() end) end
+                end
+                standParts = {}
+                standConnections = {}
+            end)
+        end
+    end
+})
+
+sections.Misc:AddButton({
+    enabled = true,
+    text = "Infinite Stamina (Once)",
+    flag = "InfiniteStamina",
+    tooltip = "Fires stamina refill to server once",
+    risky = true,
+    confirm = false,
+    callback = function()
+        local stam = character and character:FindFirstChild("Stamina")
+        if not stam then
+            library:SendNotification("Stamina value not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        safeFireServer(ValChange, stam, 1000000)
+        library:SendNotification("Stamina refilled!", 3, Color3.new(0, 1, 0))
+    end
+})
+
+sections.Misc:AddButton({
+    enabled = true,
+    text = "No Combat Tag",
+    flag = "NoCombatTag",
+    tooltip = "Sets combat tag timer to 0 right now",
+    risky = true,
+    confirm = false,
+    callback = function()
+        local combatTag = LocalPlayer:FindFirstChild("CombatTag")
+        if combatTag then
+            local Timer = combatTag:FindFirstChild("Timer") or combatTag:WaitForChild("Timer", 2)
+            if Timer then
+                safeFireServer(ValChange, Timer, 0)
+                library:SendNotification("Combat tag cleared!", 3, Color3.new(0, 1, 0))
+            else
+                library:SendNotification("Timer not found!", 3, Color3.new(1, 0, 0))
             end
-            if TimerConn then
-                TimerConn:Disconnect()
-                TimerConn = nil
-            end
+        else
+            library:SendNotification("No combat tag active!", 3, Color3.new(1, 1, 0))
         end
     end
 })
@@ -570,34 +550,41 @@ sections.Misc:AddToggle({
     callback = function(state)
         if state then
             task.spawn(function()
-                if root:CanSetNetworkOwnership() then
-                    root:SetNetworkOwner(player)
-                end
-
-                local running = true
-                getgenv().NofallRunning = running
-
-                while running and task.wait() do
-                    if not library.flags.Nofall_Toggle then break end
-                    if not root or not root.Parent then
-                        character = player.CharacterAdded:Wait()
-                        root = character:WaitForChild("HumanoidRootPart")
+                pcall(function()
+                    local r = getRoot()
+                    if r and r:CanSetNetworkOwnership() then
+                        r:SetNetworkOwner(player)
                     end
+                end)
 
-                    if root.AssemblyLinearVelocity.Y < -50 then
-                        local vel = root.AssemblyLinearVelocity
-                        root.Velocity = Vector3.new(vel.X, math.max(vel.Y, -64.9), vel.Z)
+                getgenv().NofallRunning = true
+
+                while getgenv().NofallRunning and task.wait() do
+                    if not library.flags.Nofall_Toggle then break end
+                    local r = getRoot()
+                    if not r then
+                        pcall(function()
+                            character = player.CharacterAdded:Wait()
+                            r = character:WaitForChild("HumanoidRootPart")
+                        end)
+                    end
+                    if r then
+                        pcall(function()
+                            if r.AssemblyLinearVelocity.Y < -50 then
+                                local vel = r.AssemblyLinearVelocity
+                                r.Velocity = Vector3.new(vel.X, math.max(vel.Y, -64.9), vel.Z)
+                            end
+                        end)
                     end
                 end
                 getgenv().NofallRunning = false
             end)
         else
-            if getgenv().NofallRunning then
-                getgenv().NofallRunning = false
-            end
+            getgenv().NofallRunning = false
         end
     end
 })
+
 local DiscStandName = ""
 
 sections.Misc:AddBox({
@@ -615,7 +602,7 @@ sections.Misc:AddButton({
     enabled = true,
     text = "Set Disc",
     flag = "Disc_Set",
-    tooltip = "Set's a disc's stand and exp values",
+    tooltip = "Sets a disc's stand and exp values",
     risky = false,
     confirm = false,
     callback = function()
@@ -623,24 +610,33 @@ sections.Misc:AddButton({
             library:SendNotification("Please enter a stand name!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local Disc = character:FindFirstChildOfClass('Tool')
-        if Disc and Disc:FindFirstChild('DiscType') then
-            ValChange:FireServer(Disc.StolenAttributes.StolenStand, DiscStandName)
-            ValChange:FireServer(Disc.StolenAttributes.StolenStandExp, 10000000000)
-            ValChange:FireServer(Disc.DiscType, 'Stand')
-            ValChange:FireServer(Disc.CommandType, 'None')
+        local char = getCharacter()
+        if not char then
+            library:SendNotification("Character not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        local Disc = char:FindFirstChildOfClass("Tool")
+        if Disc and Disc:FindFirstChild("DiscType") then
+            local attrs = Disc:FindFirstChild("StolenAttributes")
+            if attrs then
+                safeFireServer(ValChange, attrs:FindFirstChild("StolenStand"), DiscStandName)
+                safeFireServer(ValChange, attrs:FindFirstChild("StolenStandExp"), 10000000000)
+            end
+            safeFireServer(ValChange, Disc.DiscType, "Stand")
+            safeFireServer(ValChange, Disc:FindFirstChild("CommandType"), "None")
             library:SendNotification("Disc set to: " .. DiscStandName, 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("No disc equipped!", 3, Color3.new(1, 0, 0))
         end
     end
 })
-local StolenStyleName
+
+local StolenStyleName = ""
+
 sections.Misc:AddBox({
     enabled = true,
     focused = false,
-    text = "Style_Name",
+    text = "Style Name",
     input = "Vampire",
     flag = "Disc_Style_Input",
     callback = function(v)
@@ -652,44 +648,58 @@ sections.Misc:AddButton({
     enabled = true,
     text = "Set Disc Style",
     flag = "Disc_Set_Style",
-    tooltip = "Set's a disc's style and exp values",
+    tooltip = "Sets a disc's style and exp values",
     risky = false,
     confirm = false,
     callback = function()
         if StolenStyleName == "" then
-            library:SendNotification("Please enter a stand name!", 3, Color3.new(1, 0, 0))
+            library:SendNotification("Please enter a style name!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local Disc = character:FindFirstChildOfClass('Tool')
-        if Disc and Disc:FindFirstChild('DiscType') then
-            ValChange:FireServer(Disc.StolenAttributes.StolenStyleBool, true)
-            ValChange:FireServer(Disc.StolenAttributes.StolenStyleExp, 10000000000)
-            ValChange:FireServer(Disc.DiscType, StolenStyleName)
-
-            ValChange:FireServer(Disc.CommandType, 'None')
+        local char = getCharacter()
+        if not char then
+            library:SendNotification("Character not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        local Disc = char:FindFirstChildOfClass("Tool")
+        if Disc and Disc:FindFirstChild("DiscType") then
+            local attrs = Disc:FindFirstChild("StolenAttributes")
+            if attrs then
+                safeFireServer(ValChange, attrs:FindFirstChild("StolenStyleBool"), true)
+                safeFireServer(ValChange, attrs:FindFirstChild("StolenStyleExp"), 10000000000)
+            end
+            safeFireServer(ValChange, Disc.DiscType, StolenStyleName)
+            safeFireServer(ValChange, Disc:FindFirstChild("CommandType"), "None")
             library:SendNotification("Disc set to: " .. StolenStyleName, 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("No disc equipped!", 3, Color3.new(1, 0, 0))
         end
     end
 })
+
 sections.Misc:AddButton({
     enabled = true,
     text = "Set Yen",
     flag = "Yen_Set",
-    tooltip = "Set's a Yen Tool In the Character to 15000",
+    tooltip = "Sets a Yen Tool in the Character to 15000",
     risky = false,
     confirm = false,
     callback = function()
-        local Yen = character:FindFirstChildOfClass('Tool')
-        if Yen and Yen:FindFirstChild('YenAmount') then
-            ValChange:FireServer(Yen.YenAmount, 15000)
+        local char = getCharacter()
+        if not char then
+            library:SendNotification("Character not found!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        local Yen = char:FindFirstChildOfClass("Tool")
+        if Yen and Yen:FindFirstChild("YenAmount") then
+            safeFireServer(ValChange, Yen.YenAmount, 15000)
+            library:SendNotification("Yen set to 15000!", 3, Color3.new(0, 1, 0))
         else
-            library:SendNotification("No Yen equipped!", 3, Color3.new(1, 0, 0))
+            library:SendNotification("No Yen tool equipped!", 3, Color3.new(1, 0, 0))
         end
     end
 })
+
 sections.Misc:AddToggle({
     enabled = true,
     text = "Stand Visibility",
@@ -700,22 +710,29 @@ sections.Misc:AddToggle({
         if state then
             connections.standLoop = task.spawn(function()
                 while standVisibilityRunning and task.wait(1) do
-                    for _, Stand in pairs(workspace.Stands:GetChildren()) do
-                        for _, Part in ipairs(Stand:GetDescendants()) do
-                            if Part:IsA("BasePart") and Part.Name ~= "HumanoidRootPart" and not Stand:FindFirstChild("Deactivated") then
-                                Part.Transparency = 0
+                    local standsFolder = workspace:FindFirstChild("Stands")
+                    if standsFolder then
+                        pcall(function()
+                            for _, Stand in pairs(standsFolder:GetChildren()) do
+                                for _, Part in ipairs(Stand:GetDescendants()) do
+                                    if Part:IsA("BasePart") and Part.Name ~= "HumanoidRootPart" and not Stand:FindFirstChild("Deactivated") then
+                                        Part.Transparency = 0
+                                    end
+                                end
                             end
-                        end
+                        end)
                     end
                 end
             end)
         else
             if connections.standLoop then
-                task.cancel(connections.standLoop)
+                pcall(function() task.cancel(connections.standLoop) end)
+                connections.standLoop = nil
             end
         end
     end
 })
+
 local JoinConn
 local streamerModeActive = false
 local nameConnection = nil
@@ -731,143 +748,136 @@ sections.Misc:AddToggle({
     risky = false,
     callback = function(state)
         streamerModeActive = state
-        
+
         if state then
-            local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
-            if leaderboard then
-                leaderboard.Enabled = false
-                
-                leaderboardConnection = leaderboard:GetPropertyChangedSignal("Enabled"):Connect(function()
-                    if streamerModeActive then
-                        leaderboard.Enabled = false
-                    end
-                end)
-            end
-            
-            local mainGui = gui:FindFirstChild("MAINNGUI")
-            if mainGui and mainGui:FindFirstChild("Information") then
-                local nameLabel = mainGui.Information:FindFirstChild("Name")
-                if nameLabel then
-                    nameLabel.Text = "Zikiouh"
-                    
-                    nameConnection = nameLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                        if streamerModeActive and nameLabel.Text ~= "Zikiouh" then
-                            nameLabel.Text = "Zikiouh"
-                        end
+            pcall(function()
+                local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
+                if leaderboard then
+                    leaderboard.Enabled = false
+                    leaderboardConnection = leaderboard:GetPropertyChangedSignal("Enabled"):Connect(function()
+                        if streamerModeActive then leaderboard.Enabled = false end
                     end)
                 end
-            end
-            
-            for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= player and plr.Character then
-                    local char = plr.Character
-                    originalClothes[plr] = {}
-                    originalColors[plr] = {}
-                    
-                    for _, item in pairs(char:GetChildren()) do
-                        if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
-                            table.insert(originalClothes[plr], item:Clone())
-                            item:Destroy()
-                        end
-                    end
-                    
-                    for _, part in pairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                            originalColors[plr][part] = part.Color
-                            part.Color = Color3.fromRGB(163, 162, 165)
-                        end
+            end)
+
+            pcall(function()
+                local mainGui = gui:FindFirstChild("MAINNGUI")
+                if mainGui and mainGui:FindFirstChild("Information") then
+                    local nameLabel = mainGui.Information:FindFirstChild("Name")
+                    if nameLabel then
+                        nameLabel.Text = "Zikiouh"
+                        nameConnection = nameLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                            if streamerModeActive and nameLabel.Text ~= "Zikiouh" then
+                                nameLabel.Text = "Zikiouh"
+                            end
+                        end)
                     end
                 end
-            end
-            
-            connections.streamerCharAdded = Players.PlayerAdded:Connect(function(plr)
-                plr.CharacterAdded:Connect(function(char)
-                    if streamerModeActive and plr ~= player then
-                        task.wait(0.5)
+            end)
+
+            pcall(function()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if plr ~= player and plr.Character then
+                        local char = plr.Character
+                        originalClothes[plr] = {}
+                        originalColors[plr] = {}
                         for _, item in pairs(char:GetChildren()) do
                             if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
+                                table.insert(originalClothes[plr], item:Clone())
                                 item:Destroy()
                             end
                         end
-                        
                         for _, part in pairs(char:GetDescendants()) do
                             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                                originalColors[plr][part] = part.Color
                                 part.Color = Color3.fromRGB(163, 162, 165)
                             end
                         end
                     end
+                end
+            end)
+
+            pcall(function()
+                connections.streamerCharAdded = Players.PlayerAdded:Connect(function(plr)
+                    plr.CharacterAdded:Connect(function(char)
+                        if streamerModeActive and plr ~= player then
+                            task.wait(0.5)
+                            for _, item in pairs(char:GetChildren()) do
+                                if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
+                                    pcall(function() item:Destroy() end)
+                                end
+                            end
+                            for _, part in pairs(char:GetDescendants()) do
+                                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                                    pcall(function() part.Color = Color3.fromRGB(163, 162, 165) end)
+                                end
+                            end
+                        end
+                    end)
                 end)
             end)
-            
+
             library:SendNotification("Streamer Mode enabled!", 3, Color3.new(0, 1, 0))
         else
-            local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
-            if leaderboard then
-                leaderboard.Enabled = true
-            end
-            
-            if leaderboardConnection then
-                leaderboardConnection:Disconnect()
-                leaderboardConnection = nil
-            end
-            
-            if nameConnection then
-                nameConnection:Disconnect()
-                nameConnection = nil
-            end
-            
-            if connections.streamerCharAdded then
-                connections.streamerCharAdded:Disconnect()
-                connections.streamerCharAdded = nil
-            end
-            
-            local mainGui = gui:FindFirstChild("MAINNGUI")
-            if mainGui and mainGui:FindFirstChild("Information") then
-                local nameLabel = mainGui.Information:FindFirstChild("Name")
-                if nameLabel then
-                    nameLabel.Text = player.Name
+            pcall(function()
+                local leaderboard = game:GetService("CoreGui"):FindFirstChild("PlayerList")
+                if leaderboard then leaderboard.Enabled = true end
+            end)
+
+            if leaderboardConnection then pcall(function() leaderboardConnection:Disconnect() end); leaderboardConnection = nil end
+            if nameConnection then pcall(function() nameConnection:Disconnect() end); nameConnection = nil end
+            if connections.streamerCharAdded then pcall(function() connections.streamerCharAdded:Disconnect() end); connections.streamerCharAdded = nil end
+
+            pcall(function()
+                local mainGui = gui:FindFirstChild("MAINNGUI")
+                if mainGui and mainGui:FindFirstChild("Information") then
+                    local nameLabel = mainGui.Information:FindFirstChild("Name")
+                    if nameLabel then nameLabel.Text = player.Name end
                 end
-            end
-            
-            for plr, clothes in pairs(originalClothes) do
-                if plr.Character then
-                    for _, item in pairs(clothes) do
-                        item:Clone().Parent = plr.Character
-                    end
-                end
-            end
-            
-            for plr, colors in pairs(originalColors) do
-                if plr.Character then
-                    for part, color in pairs(colors) do
-                        if part and part.Parent then
-                            part.Color = color
+            end)
+
+            pcall(function()
+                for plr, clothes in pairs(originalClothes) do
+                    if plr and plr.Character then
+                        for _, item in pairs(clothes) do
+                            pcall(function() item:Clone().Parent = plr.Character end)
                         end
                     end
                 end
-            end
-            
+                for plr, colors in pairs(originalColors) do
+                    if plr and plr.Character then
+                        for part, color in pairs(colors) do
+                            if part and part.Parent then
+                                pcall(function() part.Color = color end)
+                            end
+                        end
+                    end
+                end
+            end)
+
             originalClothes = {}
             originalColors = {}
-            
             library:SendNotification("Streamer Mode disabled!", 3, Color3.new(1, 1, 0))
         end
     end
 })
+
 sections.Misc:AddToggle({
     enabled = true,
-    text = 'Join Notifications',
-    flag = 'JoinNotifications',
-    tooltip = 'Show notification when players join',
+    text = "Join Notifications",
+    flag = "JoinNotifications",
+    tooltip = "Show notification when players join",
     risky = false,
     callback = function(state)
         if state then
-            JoinConn = Players.PlayerAdded:Connect(function(player)
-                library:SendNotification(player.Name .. ' has joined the game', 5, Color3.new(1, 0, 0))
+            pcall(function()
+                JoinConn = Players.PlayerAdded:Connect(function(p)
+                    library:SendNotification(p.Name .. " has joined the game", 5, Color3.new(1, 0, 0))
+                end)
             end)
         else
             if JoinConn then
-                JoinConn:Disconnect()
+                pcall(function() JoinConn:Disconnect() end)
                 JoinConn = nil
             end
         end
@@ -882,31 +892,31 @@ sections.Misc:AddButton({
     risky = false,
     confirm = false,
     callback = function()
+        if not getgenv().TrackedItems or #getgenv().TrackedItems == 0 then
+            library:SendNotification("No items being tracked!", 3, Color3.new(1, 1, 0))
+            return
+        end
+
         findings = {}
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player == LocalPlayer then continue end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LocalPlayer then continue end
             for _, inventory in ipairs(inventoryLocations) do
                 if inventory then
                     for _, itemName in ipairs(getgenv().TrackedItems) do
-                        local item = inventory:FindFirstChild(itemName)
-                        if item and item:IsA("Tool") then
-                            table.insert(findings, {
-                                player = player.Name,
-                                item = itemName,
-                            })
+                        local ok, item = pcall(function()
+                            return inventory:FindFirstChild(itemName)
+                        end)
+                        if ok and item and item:IsA("Tool") then
+                            table.insert(findings, { player = p.Name, item = itemName })
                         end
                     end
                 end
             end
         end
-        
+
         if #findings > 0 then
             for _, data in ipairs(findings) do
-                library:SendNotification(
-                    `{data.player} has "{data.item}"`,
-                    5,
-                    Color3.new(0.2, 1, 0.2)
-                )
+                library:SendNotification(data.player .. ' has "' .. data.item .. '"', 5, Color3.new(0.2, 1, 0.2))
             end
         else
             library:SendNotification("No tracked items found", 5, Color3.new(1, 0.2, 0.2))
@@ -922,13 +932,16 @@ sections.Misc:AddBox({
     flag = "Add_Item_Input",
     risky = false,
     callback = function(input)
+        if not input or input == "" or input == "Item Name" then
+            library:SendNotification("Please enter a valid item name!", 3, Color3.new(1, 0, 0))
+            return
+        end
+        if not getgenv().TrackedItems then getgenv().TrackedItems = {} end
         if not table.find(getgenv().TrackedItems, input) then
             table.insert(getgenv().TrackedItems, input)
-            library:SendNotification(
-                `Added '{input}' to tracked items`,
-                3,
-                Color3.new(1, 1, 0.5)
-            )
+            library:SendNotification("Added '" .. input .. "' to tracked items", 3, Color3.new(1, 1, 0.5))
+        else
+            library:SendNotification("'" .. input .. "' is already tracked!", 3, Color3.new(1, 1, 0))
         end
     end
 })
@@ -937,11 +950,13 @@ sections.Misc:AddButton({
     enabled = true,
     text = "Infinite Yield",
     flag = "Infinite_Yield",
-    tooltip = "Yk Opens ify",
+    tooltip = "Opens Infinite Yield",
     risky = false,
     confirm = false,
     callback = function()
-        loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+        end)
     end
 })
 
@@ -949,21 +964,23 @@ sections.Misc:AddButton({
     enabled = true,
     text = "Project Rain",
     flag = "Project_Rain",
-    tooltip = "Yk Opens Project Rain",
+    tooltip = "Opens Project Rain",
     risky = false,
     confirm = false,
     callback = function()
-        script_key="qWyXqniLELdFaWAcgOABpsglqFSxDWWE"
-        parental_controls = true
-        language = "english"
-        script_id = "3d78a35719e8950ce3cc15442cdf7067"
-        if isfile(string.format("%s-cache.lua",script_id)) then 
-            pcall(delfile,string.format("%s-cache.lua",script_id))
-        end
-        getgenv().language=language=="english"and""or language
-        getgenv().parental_controls=parental_controls
-        local a=game:HttpGet("https://api.luarmor.net/files/v3/loaders/"..script_id..".lua")
-        pcall(loadstring(a))
+        pcall(function()
+            script_key = "qWyXqniLELdFaWAcgOABpsglqFSxDWWE"
+            parental_controls = true
+            language = "english"
+            script_id = "3d78a35719e8950ce3cc15442cdf7067"
+            if isfile(script_id .. "-cache.lua") then
+                pcall(delfile, script_id .. "-cache.lua")
+            end
+            getgenv().language = language == "english" and "" or language
+            getgenv().parental_controls = parental_controls
+            local a = game:HttpGet("https://api.luarmor.net/files/v3/loaders/" .. script_id .. ".lua")
+            pcall(loadstring(a))
+        end)
     end
 })
 
@@ -971,94 +988,73 @@ sections.Misc:AddButton({
     enabled = true,
     text = "Bloodlines Script",
     flag = "Bloodlines_Script",
-    tooltip = "Yk Opens IAmJamal10 Script",
+    tooltip = "Opens IAmJamal10 Script",
     risky = false,
     confirm = false,
     callback = function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/IAmJamal10/Bloodlines/main/ScriptOP"))()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/IAmJamal10/Bloodlines/main/ScriptOP"))()
+        end)
     end
 })
-
--- ========================================
--- ESP SECTION
--- ========================================
 
 local hitboxTransparency = 0.96
 
 sections.ESPSection:AddSlider({
-    text = "Hitbox Transparency", 
-    flag = 'Transparency_Slider', 
-    suffix = "", 
+    text = "Hitbox Transparency",
+    flag = "Transparency_Slider",
+    suffix = "",
     value = 0.000,
-    min = 0, 
+    min = 0,
     max = 1,
     increment = 0.01,
-    callback = function(v) 
+    callback = function(v)
         hitboxTransparency = v
     end
 })
+
 local HeightSlid = 1.473
 local heightConnection = nil
 
 sections.Combat:AddSlider({
-    text = "Height Slider", 
-    flag = 'Height', 
-    suffix = "CM", 
+    text = "Height Slider",
+    flag = "Height",
+    suffix = "CM",
     value = 1.473,
-    min = 0.15, 
+    min = 0.15,
     max = 5,
     increment = 0.001,
-    callback = function(v) 
+    callback = function(v)
         HeightSlid = v
-        
-        if not character or not character:FindFirstChild("Humanoid") then
+        local char = getCharacter()
+        if not char then
             library:SendNotification("Character not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local hum = character.Humanoid
-        
-        local baseHeight = 1.473
-        local baseDepth = 1.133
-        local baseWidth = 1.133
-        local baseHead = 1.133
-        
-        local heightRatio = v / baseHeight
-        
-        local newDepth = baseDepth * heightRatio
-        local newWidth = baseWidth * heightRatio
-        local newHead = baseHead * heightRatio
-        
-        if hum:FindFirstChild("BodyHeightScale") then
-            ValChange:FireServer(hum.BodyHeightScale, v)
-            
-            if heightConnection then
-                heightConnection:Disconnect()
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+
+        local baseHeight, baseDepth, baseWidth, baseHead = 1.473, 1.133, 1.133, 1.133
+        local ratio = v / baseHeight
+
+        pcall(function()
+            if hum:FindFirstChild("BodyHeightScale") then
+                safeFireServer(ValChange, hum.BodyHeightScale, v)
+                if heightConnection then pcall(function() heightConnection:Disconnect() end) end
+                heightConnection = hum.BodyHeightScale.Changed:Connect(function(value)
+                    if math.abs(value - HeightSlid) > 0.001 then
+                        local r = HeightSlid / baseHeight
+                        safeFireServer(ValChange, hum.BodyHeightScale, HeightSlid)
+                        safeFireServer(ValChange, hum.BodyDepthScale, baseDepth * r)
+                        safeFireServer(ValChange, hum.BodyWidthScale, baseWidth * r)
+                        safeFireServer(ValChange, hum.HeadScale, baseHead * r)
+                    end
+                end)
             end
-            
-            heightConnection = hum.BodyHeightScale.Changed:Connect(function(value)
-                if math.abs(value - HeightSlid) > 0.001 then
-                    ValChange:FireServer(hum.BodyHeightScale, HeightSlid)
-                    
-                    local ratio = HeightSlid / baseHeight
-                    ValChange:FireServer(hum.BodyDepthScale, baseDepth * ratio)
-                    ValChange:FireServer(hum.BodyWidthScale, baseWidth * ratio)
-                    ValChange:FireServer(hum.HeadScale, baseHead * ratio)
-                end
-            end)
-        end
-        
-        if hum:FindFirstChild("BodyDepthScale") then
-            ValChange:FireServer(hum.BodyDepthScale, newDepth)
-        end
-        
-        if hum:FindFirstChild("BodyWidthScale") then
-            ValChange:FireServer(hum.BodyWidthScale, newWidth)
-        end
-        
-        if hum:FindFirstChild("HeadScale") then
-            ValChange:FireServer(hum.HeadScale, newHead)
-        end
+            if hum:FindFirstChild("BodyDepthScale") then safeFireServer(ValChange, hum.BodyDepthScale, baseDepth * ratio) end
+            if hum:FindFirstChild("BodyWidthScale") then safeFireServer(ValChange, hum.BodyWidthScale, baseWidth * ratio) end
+            if hum:FindFirstChild("HeadScale") then safeFireServer(ValChange, hum.HeadScale, baseHead * ratio) end
+        end)
     end
 })
 
@@ -1066,37 +1062,31 @@ player.CharacterAdded:Connect(function(newChar)
     task.wait(0.5)
     character = newChar
     humanoid = newChar:WaitForChild("Humanoid")
-    
-    if humanoid:FindFirstChild("BodyHeightScale") then
-        ValChange:FireServer(humanoid.BodyHeightScale, HeightSlid)
-        
-        local baseHeight = 1.473
-        local baseDepth = 1.133
-        local baseWidth = 1.133
-        local baseHead = 1.133
-        
-        local ratio = HeightSlid / baseHeight
-        
-        ValChange:FireServer(humanoid.BodyDepthScale, baseDepth * ratio)
-        ValChange:FireServer(humanoid.BodyWidthScale, baseWidth * ratio)
-        ValChange:FireServer(humanoid.HeadScale, baseHead * ratio)
-        
-        if heightConnection then
-            heightConnection:Disconnect()
+
+    pcall(function()
+        if humanoid:FindFirstChild("BodyHeightScale") then
+            local baseHeight, baseDepth, baseWidth, baseHead = 1.473, 1.133, 1.133, 1.133
+            local ratio = HeightSlid / baseHeight
+
+            safeFireServer(ValChange, humanoid.BodyHeightScale, HeightSlid)
+            safeFireServer(ValChange, humanoid.BodyDepthScale, baseDepth * ratio)
+            safeFireServer(ValChange, humanoid.BodyWidthScale, baseWidth * ratio)
+            safeFireServer(ValChange, humanoid.HeadScale, baseHead * ratio)
+
+            if heightConnection then pcall(function() heightConnection:Disconnect() end) end
+            heightConnection = humanoid.BodyHeightScale.Changed:Connect(function(value)
+                if math.abs(value - HeightSlid) > 0.001 then
+                    local r = HeightSlid / baseHeight
+                    safeFireServer(ValChange, humanoid.BodyHeightScale, HeightSlid)
+                    safeFireServer(ValChange, humanoid.BodyDepthScale, baseDepth * r)
+                    safeFireServer(ValChange, humanoid.BodyWidthScale, baseWidth * r)
+                    safeFireServer(ValChange, humanoid.HeadScale, baseHead * r)
+                end
+            end)
         end
-        
-        heightConnection = humanoid.BodyHeightScale.Changed:Connect(function(value)
-            if math.abs(value - HeightSlid) > 0.001 then
-                ValChange:FireServer(humanoid.BodyHeightScale, HeightSlid)
-                
-                local ratio = HeightSlid / baseHeight
-                ValChange:FireServer(humanoid.BodyDepthScale, baseDepth * ratio)
-                ValChange:FireServer(humanoid.BodyWidthScale, baseWidth * ratio)
-                ValChange:FireServer(humanoid.HeadScale, baseHead * ratio)
-            end
-        end)
-    end
+    end)
 end)
+
 sections.ESPSection:AddToggle({
     enabled = true,
     text = "Hitbox Visibility",
@@ -1105,10 +1095,11 @@ sections.ESPSection:AddToggle({
     confirm = false,
     callback = function()
         hitboxVisibilityActive = not hitboxVisibilityActive
-        
+
         if hitboxVisibilityActive then
             local function styleHitbox(obj)
-                if obj.Name == "Hitbox" and obj:IsA("BasePart") then
+                if not obj or obj.Name ~= "Hitbox" or not obj:IsA("BasePart") then return end
+                pcall(function()
                     hitboxParts[obj] = {
                         Transparency = obj.Transparency,
                         Color = obj.Color,
@@ -1117,100 +1108,91 @@ sections.ESPSection:AddToggle({
                     obj.Transparency = hitboxTransparency
                     obj.Color = Color3.new(1, 0, 0)
                     obj.Material = Enum.Material.Neon
-                end
+                end)
             end
 
-            connections.hitboxAddedWorkspace = workspace.ChildAdded:Connect(function(child)
-                if child.Name == "Hitbox" then
-                    styleHitbox(child)
+            pcall(function()
+                connections.hitboxAddedWorkspace = workspace.ChildAdded:Connect(function(child)
+                    if child and child.Name == "Hitbox" then styleHitbox(child) end
+                end)
+
+                local fxFolder = workspace:FindFirstChild("FX") or Instance.new("Folder")
+                connections.hitboxAddedFX = fxFolder.ChildAdded:Connect(styleHitbox)
+
+                for _, child in pairs(workspace:GetChildren()) do
+                    if child.Name == "Hitbox" then styleHitbox(child) end
+                end
+
+                local fx = workspace:FindFirstChild("FX")
+                if fx then
+                    for _, child in pairs(fx:GetChildren()) do styleHitbox(child) end
                 end
             end)
-
-            connections.hitboxAddedFX = (workspace:FindFirstChild("FX") or Instance.new("Folder")).ChildAdded:Connect(styleHitbox)
-
-            for _, child in pairs(workspace:GetChildren()) do
-                if child.Name == "Hitbox" then
-                    styleHitbox(child)
-                end
-            end
-
-            local fx = workspace:FindFirstChild("FX")
-            if fx then
-                for _, child in pairs(fx:GetChildren()) do
-                    styleHitbox(child)
-                end
-            end
         else
-            for part, properties in pairs(hitboxParts) do
-                if part:IsDescendantOf(workspace) then
-                    part.Transparency = properties.Transparency
-                    part.Color = properties.Color
-                    part.Material = properties.Material
+            pcall(function()
+                for part, properties in pairs(hitboxParts) do
+                    if part and part:IsDescendantOf(workspace) then
+                        part.Transparency = properties.Transparency
+                        part.Color = properties.Color
+                        part.Material = properties.Material
+                    end
                 end
-            end
-            hitboxParts = {}
-            
-            if connections.hitboxAddedWorkspace then
-                connections.hitboxAddedWorkspace:Disconnect()
-            end
-            if connections.hitboxAddedFX then
-                connections.hitboxAddedFX:Disconnect()
-            end
+                hitboxParts = {}
+                if connections.hitboxAddedWorkspace then connections.hitboxAddedWorkspace:Disconnect() end
+                if connections.hitboxAddedFX then connections.hitboxAddedFX:Disconnect() end
+            end)
         end
     end
 })
--- ========================================
--- CHARACTER RESPAWN HANDLER
--- ========================================
 
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = newChar:WaitForChild("Humanoid")
     root = newChar:WaitForChild("HumanoidRootPart")
-    ToChange = newChar.Stamina
-    
-    if walkspeedCheat then
-        humanoid.WalkSpeed = currentWalkspeed
+
+    pcall(function() inventoryLocations[2] = newChar end)
+
+    local stam = newChar:FindFirstChild("Stamina")
+    if stam then
+        local ToChange = stam
+        _ = ToChange
     end
-    if jumppowerCheat then
-        humanoid.JumpPower = currentJumppower
-    end
+
+    if walkspeedCheat then pcall(function() humanoid.WalkSpeed = currentWalkspeed end) end
+    if jumppowerCheat then pcall(function() humanoid.JumpPower = currentJumppower end) end
+
     if infiniteJumpEnabled and not infiniteJumpConnection then
-        infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
-            if player.Character then
-                local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if currentHumanoid and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Dead then
-                    currentHumanoid:ChangeState("Jumping")
+        pcall(function()
+            infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+                local char = getCharacter()
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum and hum:GetState() ~= Enum.HumanoidStateType.Dead then
+                        pcall(function() hum:ChangeState("Jumping") end)
+                    end
                 end
-            end
+            end)
         end)
     end
 end)
 
--- ========================================
--- INITIALIZATION MESSAGE
--- ========================================
 local SettingsFileName = "JJBADL_Settings.json"
 local AutoExecFileName = "JJBADL_AutoExec.txt"
 
 local function SaveSettings()
     local settingsToSave = {}
-    
     for flag, value in pairs(library.flags) do
         settingsToSave[flag] = value
     end
-    
     settingsToSave.CustomSettings = {
         WalkspeedValue = currentWalkspeed,
         JumppowerValue = currentJumppower,
         HitboxTransparency = hitboxTransparency,
         TrackedItems = getgenv().TrackedItems
     }
-    
     local success, err = pcall(function()
         writefile(SettingsFileName, game:GetService("HttpService"):JSONEncode(settingsToSave))
     end)
-    
     if success then
         library:SendNotification("Settings saved successfully!", 3, Color3.new(0, 1, 0))
     else
@@ -1219,54 +1201,35 @@ local function SaveSettings()
 end
 
 local function LoadSettings()
-    if not isfile(SettingsFileName) then
-        return false
-    end
-    
+    if not isfile(SettingsFileName) then return false end
     local success, result = pcall(function()
         local data = readfile(SettingsFileName)
         return game:GetService("HttpService"):JSONDecode(data)
     end)
-    
     if not success then
         warn("Failed to load settings: " .. tostring(result))
         return false
     end
-    
     for flag, value in pairs(result) do
         if flag ~= "CustomSettings" and library.flags[flag] ~= nil then
             library.flags[flag] = value
         end
     end
-    
     if result.CustomSettings then
-        if result.CustomSettings.WalkspeedValue then
-            currentWalkspeed = result.CustomSettings.WalkspeedValue
-        end
-        if result.CustomSettings.JumppowerValue then
-            currentJumppower = result.CustomSettings.JumppowerValue
-        end
-        if result.CustomSettings.HitboxTransparency then
-            hitboxTransparency = result.CustomSettings.HitboxTransparency
-        end
-        if result.CustomSettings.TrackedItems then
-            getgenv().TrackedItems = result.CustomSettings.TrackedItems
-        end
+        if result.CustomSettings.WalkspeedValue then currentWalkspeed = result.CustomSettings.WalkspeedValue end
+        if result.CustomSettings.JumppowerValue then currentJumppower = result.CustomSettings.JumppowerValue end
+        if result.CustomSettings.HitboxTransparency then hitboxTransparency = result.CustomSettings.HitboxTransparency end
+        if result.CustomSettings.TrackedItems then getgenv().TrackedItems = result.CustomSettings.TrackedItems end
     end
-    
     library:SendNotification("Settings loaded successfully!", 3, Color3.new(0, 1, 0))
     return true
 end
 
 local function EnableAutoExec()
-    local scriptContent = [[
-loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/somethingig/refs/heads/main/script.lua"))()
-]]
-    
+    local scriptContent = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/somethingig/refs/heads/main/script.lua"))()'
     local success, err = pcall(function()
         writefile(AutoExecFileName, scriptContent)
     end)
-    
     if success then
         library:SendNotification("Auto-execute enabled! Place this in your autoexec folder", 5, Color3.new(0, 1, 0))
     else
@@ -1279,7 +1242,6 @@ local function DisableAutoExec()
         local success, err = pcall(function()
             delfile(AutoExecFileName)
         end)
-        
         if success then
             library:SendNotification("Auto-execute disabled!", 3, Color3.new(1, 1, 0))
         else
@@ -1310,9 +1272,7 @@ sections.Settings:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        if LoadSettings() then
-            task.wait(0.5)
-        else
+        if not LoadSettings() then
             library:SendNotification("No saved settings found!", 3, Color3.new(1, 0, 0))
         end
     end
@@ -1338,9 +1298,7 @@ sections.Settings:AddToggle({
     end
 })
 
-sections.Settings:AddSeparator({
-    text = "Auto-Execute"
-})
+sections.Settings:AddSeparator({ text = "Auto-Execute" })
 
 sections.Settings:AddButton({
     enabled = true,
@@ -1372,9 +1330,7 @@ sections.Settings:AddText({
     flag = "AutoExec_Info"
 })
 
-sections.Settings:AddSeparator({
-    text = "Config Management"
-})
+sections.Settings:AddSeparator({ text = "Config Management" })
 
 local ConfigName = ""
 
@@ -1401,24 +1357,20 @@ sections.Settings:AddButton({
             library:SendNotification("Please enter a config name!", 3, Color3.new(1, 0, 0))
             return
         end
-        
         local settingsToSave = {}
         for flag, value in pairs(library.flags) do
             settingsToSave[flag] = value
         end
-        
         settingsToSave.CustomSettings = {
             WalkspeedValue = currentWalkspeed,
             JumppowerValue = currentJumppower,
             HitboxTransparency = hitboxTransparency,
             TrackedItems = getgenv().TrackedItems
         }
-        
         local fileName = "JJBADL_" .. ConfigName .. ".json"
         local success = pcall(function()
             writefile(fileName, game:GetService("HttpService"):JSONEncode(settingsToSave))
         end)
-        
         if success then
             library:SendNotification("Config '" .. ConfigName .. "' saved!", 3, Color3.new(0, 1, 0))
         else
@@ -1439,41 +1391,27 @@ sections.Settings:AddButton({
             library:SendNotification("Please enter a config name!", 3, Color3.new(1, 0, 0))
             return
         end
-        
         local fileName = "JJBADL_" .. ConfigName .. ".json"
-        
         if not isfile(fileName) then
             library:SendNotification("Config not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
         local success, result = pcall(function()
             local data = readfile(fileName)
             return game:GetService("HttpService"):JSONDecode(data)
         end)
-        
         if success then
             for flag, value in pairs(result) do
                 if flag ~= "CustomSettings" and library.flags[flag] ~= nil then
                     library.flags[flag] = value
                 end
             end
-            
             if result.CustomSettings then
-                if result.CustomSettings.WalkspeedValue then
-                    currentWalkspeed = result.CustomSettings.WalkspeedValue
-                end
-                if result.CustomSettings.JumppowerValue then
-                    currentJumppower = result.CustomSettings.JumppowerValue
-                end
-                if result.CustomSettings.HitboxTransparency then
-                    hitboxTransparency = result.CustomSettings.HitboxTransparency
-                end
-                if result.CustomSettings.TrackedItems then
-                    getgenv().TrackedItems = result.CustomSettings.TrackedItems
-                end
+                if result.CustomSettings.WalkspeedValue then currentWalkspeed = result.CustomSettings.WalkspeedValue end
+                if result.CustomSettings.JumppowerValue then currentJumppower = result.CustomSettings.JumppowerValue end
+                if result.CustomSettings.HitboxTransparency then hitboxTransparency = result.CustomSettings.HitboxTransparency end
+                if result.CustomSettings.TrackedItems then getgenv().TrackedItems = result.CustomSettings.TrackedItems end
             end
-            
             library:SendNotification("Config '" .. ConfigName .. "' loaded!", 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("Failed to load config!", 3, Color3.new(1, 0, 0))
@@ -1493,14 +1431,9 @@ sections.Settings:AddButton({
             library:SendNotification("Please enter a config name!", 3, Color3.new(1, 0, 0))
             return
         end
-        
         local fileName = "JJBADL_" .. ConfigName .. ".json"
-        
         if isfile(fileName) then
-            local success = pcall(function()
-                delfile(fileName)
-            end)
-            
+            local success = pcall(function() delfile(fileName) end)
             if success then
                 library:SendNotification("Config '" .. ConfigName .. "' deleted!", 3, Color3.new(1, 1, 0))
             else
@@ -1521,12 +1454,8 @@ sections.Settings:AddButton({
     confirm = false,
     callback = function()
         local configs = {}
-        
         if isfolder then
-            local success, files = pcall(function()
-                return listfiles(".")
-            end)
-            
+            local success, files = pcall(function() return listfiles(".") end)
             if success then
                 for _, file in pairs(files) do
                     if string.match(file, "JJBADL_.*%.json") then
@@ -1538,7 +1467,6 @@ sections.Settings:AddButton({
                 end
             end
         end
-        
         if #configs > 0 then
             library:SendNotification("Saved configs: " .. table.concat(configs, ", "), 5, Color3.new(0.5, 0.5, 1))
         else
@@ -1549,25 +1477,23 @@ sections.Settings:AddButton({
 
 task.spawn(function()
     task.wait(1)
-    
-    if isfile(SettingsFileName) then
-        LoadSettings()
-    end
+    if isfile(SettingsFileName) then LoadSettings() end
 end)
 
-game:GetService("CoreGui").ChildRemoved:Connect(function(child)
-    if child.Name == library.ScreenGui.Name then
-        if library.flags.Auto_Save_Toggle then
-            SaveSettings()
+pcall(function()
+    game:GetService("CoreGui").ChildRemoved:Connect(function(child)
+        if child.Name == library.ScreenGui.Name then
+            if library.flags.Auto_Save_Toggle then SaveSettings() end
         end
-    end
+    end)
 end)
 
-game.Players.LocalPlayer.OnTeleport:Connect(function()
-    if library.flags.Auto_Save_Toggle then
-        SaveSettings()
-    end
+pcall(function()
+    game.Players.LocalPlayer.OnTeleport:Connect(function()
+        if library.flags.Auto_Save_Toggle then SaveSettings() end
+    end)
 end)
+
 sections.Combat:AddButton({
     enabled = true,
     text = "Stand God Mode",
@@ -1576,15 +1502,9 @@ sections.Combat:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
-            return
-        end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
+        local playerStand = getPlayerStand()
         if playerStand and playerStand:FindFirstChild("DamageProtection") then
-            ValChange:FireServer(playerStand.DamageProtection, 0)
+            safeFireServer(ValChange, playerStand.DamageProtection, 0)
             library:SendNotification("Stand God Mode activated!", 3, Color3.new(0, 1, 0))
         else
             library:SendNotification("Stand not found or no DamageProtection!", 3, Color3.new(1, 0, 0))
@@ -1596,34 +1516,29 @@ sections.Combat:AddButton({
     enabled = true,
     text = "Infinite Remote Control Range",
     flag = "Infinite_RC_Button",
-    tooltip = "Creates MirrorStandSeperator value for infinite range",
+    tooltip = "Creates MirrorStandSeparator value for infinite range",
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+        local playerStand = getPlayerStand()
+        if not playerStand then
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
-        if playerStand then
-            if playerStand:FindFirstChild("MirrorStandSeparator") then
-                library:SendNotification("MirrorStandSeparator already exists!", 3, Color3.new(1, 1, 0))
-                return
-            end
-            
+        if playerStand:FindFirstChild("MirrorStandSeparator") then
+            library:SendNotification("MirrorStandSeparator already exists!", 3, Color3.new(1, 1, 0))
+            return
+        end
+        pcall(function()
             local intValue = Instance.new("IntValue")
             intValue.Name = "MirrorStandSeparator"
             intValue.Value = 0
             intValue.Parent = playerStand
-            
-            library:SendNotification("Infinite RC Range activated!", 3, Color3.new(0, 1, 0))
-        else
-            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
-        end
+        end)
+        library:SendNotification("Infinite RC Range activated!", 3, Color3.new(0, 1, 0))
     end
 })
+
 sections.Combat:AddButton({
     enabled = true,
     text = "Make Stand Aerial",
@@ -1632,28 +1547,22 @@ sections.Combat:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+        local playerStand = getPlayerStand()
+        if not playerStand then
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
-        if playerStand then
-            if playerStand:FindFirstChild("SteamForm") then
-                library:SendNotification("SteamForm already exists!", 3, Color3.new(1, 1, 0))
-                return
-            end
-            
+        if playerStand:FindFirstChild("SteamForm") then
+            library:SendNotification("SteamForm already exists!", 3, Color3.new(1, 1, 0))
+            return
+        end
+        pcall(function()
             local intValue = Instance.new("IntValue")
             intValue.Name = "SteamForm"
             intValue.Value = 0
             intValue.Parent = playerStand
-            
-            library:SendNotification("Stand is now Aerial!", 3, Color3.new(0, 1, 0))
-        else
-            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
-        end
+        end)
+        library:SendNotification("Stand is now Aerial!", 3, Color3.new(0, 1, 0))
     end
 })
 
@@ -1665,29 +1574,26 @@ sections.Combat:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+        local playerStand = getPlayerStand()
+        if not playerStand or not playerStand:FindFirstChild("Attributes") then
+            library:SendNotification("Stand or Attributes not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
-        if playerStand and playerStand:FindFirstChild("Attributes") then
+        pcall(function()
             local atts = playerStand.Attributes
-
             local Electricity = Instance.new("NumberValue", atts)
             local Liquid = Instance.new("NumberValue", atts)
             local TowerSpeed = Instance.new("NumberValue", atts)
-            Liquid.Value = 10000
+            Electricity.Name = "Electricity"
             Electricity.Value = 10000
-            TowerSpeed.Name = 'TowerSpeed'
-            Electricity.Name = 'Electricity'
-            Liquid.Name = 'Liquid'
-            game.Lighting.Raining = true
-            library:SendNotification("Stand speed maximized!", 3, Color3.new(0, 1, 0))
-        else
-            library:SendNotification("Stand or Attributes not found!", 3, Color3.new(1, 0, 0))
-        end
+            Liquid.Name = "Liquid"
+            Liquid.Value = 10000
+            TowerSpeed.Name = "TowerSpeed"
+            if game.Lighting:FindFirstChild("Raining") then
+                game.Lighting.Raining.Value = true
+            end
+        end)
+        library:SendNotification("Stand speed maximized!", 3, Color3.new(0, 1, 0))
     end
 })
 
@@ -1699,29 +1605,28 @@ sections.Combat:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        local status = character:FindFirstChild("Status")
+        local char = getCharacter()
+        local status = char and char:FindFirstChild("Status")
         if not status then
             library:SendNotification("Status not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
         local debuffs = {
-            "ThreeFreezed", "Stun", "LesserStun", "Undernourished", 
+            "ThreeFreezed", "Stun", "LesserStun", "Undernourished",
             "LesserStunRunless", "Blinded", "TimeErase", "Dehydrated",
             "LifeShot", "ShrunkenSlowDebuff", "StandTRIPPED", "Ragdolled",
-            "BookedHeavy", "Booked", "NoMovement", "Expelling", 
-            "ElectricTransferring", "MindControlled", "Slipped", 
+            "BookedHeavy", "Booked", "NoMovement", "Expelling",
+            "ElectricTransferring", "MindControlled", "Slipped",
             "Charging", "BubbleEncased"
         }
-        
         local removed = 0
         for _, debuff in pairs(debuffs) do
-            if status:FindFirstChild(debuff) then
-                status[debuff]:Destroy()
+            local item = status:FindFirstChild(debuff)
+            if item then
+                pcall(function() item:Destroy() end)
                 removed = removed + 1
             end
         end
-        
         if removed > 0 then
             library:SendNotification("Removed " .. removed .. " debuffs!", 3, Color3.new(0, 1, 0))
         else
@@ -1734,35 +1639,29 @@ sections.Combat:AddButton({
     enabled = true,
     text = "Freeze Stand Position",
     flag = "Freeze_Stand_Button",
-    tooltip = "Locks stand in current position",
+    tooltip = "Locks stand in current position (toggle)",
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
+        local playerStand = getPlayerStand()
+        if not playerStand or not playerStand:FindFirstChild("HumanoidRootPart") then
+            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
             return
         end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
-        if playerStand and playerStand:FindFirstChild("HumanoidRootPart") then
-            local root = playerStand.HumanoidRootPart
-            
-            if root:FindFirstChild("FreezePosition") then
-                root.FreezePosition:Destroy()
+        local standRoot = playerStand.HumanoidRootPart
+        pcall(function()
+            if standRoot:FindFirstChild("FreezePosition") then
+                standRoot.FreezePosition:Destroy()
                 library:SendNotification("Stand position unfrozen!", 3, Color3.new(1, 1, 0))
             else
                 local bodyPos = Instance.new("BodyPosition")
                 bodyPos.Name = "FreezePosition"
                 bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bodyPos.Position = root.Position
-                bodyPos.Parent = root
-                
+                bodyPos.Position = standRoot.Position
+                bodyPos.Parent = standRoot
                 library:SendNotification("Stand position frozen!", 3, Color3.new(0, 1, 0))
             end
-        else
-            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
-        end
+        end)
     end
 })
 
@@ -1774,21 +1673,20 @@ sections.Combat:AddButton({
     risky = false,
     confirm = false,
     callback = function()
-        local standsFolder = workspace:FindFirstChild("Stands")
-        if not standsFolder then
-            library:SendNotification("Stands folder not found!", 3, Color3.new(1, 0, 0))
-            return
-        end
-        
-        local playerStand = standsFolder:FindFirstChild(player.Name)
-        if playerStand and playerStand:FindFirstChild("HumanoidRootPart") then
-            playerStand.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame
+        local playerStand = getPlayerStand()
+        local char = getCharacter()
+        local charRoot = char and char:FindFirstChild("HumanoidRootPart")
+        if playerStand and playerStand:FindFirstChild("HumanoidRootPart") and charRoot then
+            pcall(function()
+                playerStand.HumanoidRootPart.CFrame = charRoot.CFrame
+            end)
             library:SendNotification("Stand teleported to you!", 3, Color3.new(0, 1, 0))
         else
-            library:SendNotification("Stand not found!", 3, Color3.new(1, 0, 0))
+            library:SendNotification("Stand or character root not found!", 3, Color3.new(1, 0, 0))
         end
     end
 })
+
 local ammoConnections = {}
 
 sections.Combat:AddToggle({
@@ -1798,48 +1696,46 @@ sections.Combat:AddToggle({
     callback = function(state)
         if state then
             local function handleTool(tool)
-                if tool:IsA("Tool") and tool:FindFirstChild("Ammo") then
-                    local ammo = tool.Ammo
-                    
-                    ValChange:FireServer(ammo, 6)
-                    
+                if not tool or not tool:IsA("Tool") then return end
+                local ammo = tool:FindFirstChild("Ammo")
+                if not ammo then return end
+                pcall(function()
+                    safeFireServer(ValChange, ammo, 6)
                     local ammoConn = ammo.Changed:Connect(function(value)
                         if library.flags.InfiniteAmmo_Toggle and value < 6 then
-                            ValChange:FireServer(ammo, 6)
+                            safeFireServer(ValChange, ammo, 6)
                         end
                     end)
-                    
                     ammoConnections[tool] = ammoConn
-                    
                     tool.AncestryChanged:Connect(function()
                         if not tool:IsDescendantOf(workspace) and ammoConnections[tool] then
-                            ammoConnections[tool]:Disconnect()
+                            pcall(function() ammoConnections[tool]:Disconnect() end)
                             ammoConnections[tool] = nil
                         end
                     end)
-                end
+                end)
             end
-            
-            for _, tool in pairs(character:GetChildren()) do
-                handleTool(tool)
+
+            local char = getCharacter()
+            if char then
+                for _, tool in pairs(char:GetChildren()) do handleTool(tool) end
+                pcall(function()
+                    connections.infiniteAmmo = char.ChildAdded:Connect(handleTool)
+                end)
             end
-            
-            connections.infiniteAmmo = character.ChildAdded:Connect(function(child)
-                handleTool(child)
-            end)
         else
             if connections.infiniteAmmo then
-                connections.infiniteAmmo:Disconnect()
+                pcall(function() connections.infiniteAmmo:Disconnect() end)
                 connections.infiniteAmmo = nil
             end
-            
             for tool, conn in pairs(ammoConnections) do
-                conn:Disconnect()
+                pcall(function() conn:Disconnect() end)
             end
             ammoConnections = {}
         end
     end
 })
+
 local moderatorIds = {
     1299387765, 2232457771, 2307801292, 1909757624, 3445752716,
     4550728214, 5680333301, 50203403, 1708981366, 399667054,
@@ -1851,26 +1747,27 @@ local modDetectorConnection = nil
 
 sections.Misc:AddToggle({
     enabled = true,
-    text = 'Moderator Detector',
-    flag = 'ModDetector',
-    tooltip = 'Notifies when a moderator joins',
+    text = "Moderator Detector",
+    flag = "ModDetector",
+    tooltip = "Notifies when a moderator joins",
     risky = false,
     callback = function(state)
         if state then
-            for _, plr in pairs(Players:GetPlayers()) do
-                if table.find(moderatorIds, plr.UserId) then
-                    library:SendNotification("⚠️ MODERATOR DETECTED: " .. plr.Name, 10, Color3.new(1, 0, 0))
+            pcall(function()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if table.find(moderatorIds, plr.UserId) then
+                        library:SendNotification("⚠️ MODERATOR DETECTED: " .. plr.Name, 10, Color3.new(1, 0, 0))
+                    end
                 end
-            end
-            
-            modDetectorConnection = Players.PlayerAdded:Connect(function(plr)
-                if table.find(moderatorIds, plr.UserId) then
-                    library:SendNotification("⚠️ MODERATOR JOINED: " .. plr.Name, 10, Color3.new(1, 0, 0))
-                end
+                modDetectorConnection = Players.PlayerAdded:Connect(function(plr)
+                    if table.find(moderatorIds, plr.UserId) then
+                        library:SendNotification("⚠️ MODERATOR JOINED: " .. plr.Name, 10, Color3.new(1, 0, 0))
+                    end
+                end)
             end)
         else
             if modDetectorConnection then
-                modDetectorConnection:Disconnect()
+                pcall(function() modDetectorConnection:Disconnect() end)
                 modDetectorConnection = nil
             end
         end
@@ -1881,44 +1778,47 @@ local modKickConnection = nil
 
 sections.Misc:AddToggle({
     enabled = true,
-    text = 'Moderator Detector Kick',
-    flag = 'ModDetectorKick',
-    tooltip = 'Automatically kicks you when a moderator is detected',
+    text = "Moderator Detector Kick",
+    flag = "ModDetectorKick",
+    tooltip = "Automatically kicks you when a moderator is detected",
     risky = true,
     callback = function(state)
         if state then
-            for _, plr in pairs(Players:GetPlayers()) do
-                if table.find(moderatorIds, plr.UserId) then
-                    if LocalPlayer:FindFirstChild('CombatTag') then
-                        local Timer = LocalPlayer.CombatTag:WaitForChild('Timer')
-                        ValChange:FireServer(Timer, 0)
-                        task.wait(0.5)
+            pcall(function()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if table.find(moderatorIds, plr.UserId) then
+                        if LocalPlayer:FindFirstChild("CombatTag") then
+                            local Timer = LocalPlayer.CombatTag:WaitForChild("Timer", 2)
+                            if Timer then
+                                safeFireServer(ValChange, Timer, 0)
+                                task.wait(0.5)
+                            end
+                        end
+                        LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
+                        return
                     end
-                    
-                    LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
-                    return
                 end
-            end
-            
-            modKickConnection = Players.PlayerAdded:Connect(function(plr)
-                if table.find(moderatorIds, plr.UserId) then
-                    library:SendNotification("⚠️ MODERATOR DETECTED - KICKING!", 3, Color3.new(1, 0, 0))
-                    
-                    if LocalPlayer:FindFirstChild('CombatTag') then
-                        local Timer = LocalPlayer.CombatTag:WaitForChild('Timer')
-                        ValChange:FireServer(Timer, 0)
-                        task.wait(0.5)
+                modKickConnection = Players.PlayerAdded:Connect(function(plr)
+                    if table.find(moderatorIds, plr.UserId) then
+                        library:SendNotification("⚠️ MODERATOR DETECTED - KICKING!", 3, Color3.new(1, 0, 0))
+                        if LocalPlayer:FindFirstChild("CombatTag") then
+                            local Timer = LocalPlayer.CombatTag:WaitForChild("Timer", 2)
+                            if Timer then
+                                safeFireServer(ValChange, Timer, 0)
+                                task.wait(0.5)
+                            end
+                        end
+                        LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
                     end
-                    
-                    LocalPlayer:Kick("⚠️ MODERATOR DETECTED: " .. plr.Name .. " - Auto-kicked for safety")
-                end
+                end)
             end)
         else
             if modKickConnection then
-                modKickConnection:Disconnect()
+                pcall(function() modKickConnection:Disconnect() end)
                 modKickConnection = nil
             end
         end
     end
 })
+
 library:SendNotification("Made by Zik $20 dm me Zikiouh for full script", 5, Color3.new(1, 0, 0))
