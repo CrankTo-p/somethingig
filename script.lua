@@ -501,21 +501,55 @@ sections.Combat:AddToggle({
     end
 })
 
-sections.Misc:AddButton({
+sections.Misc:AddToggle({
     enabled = true,
-    text = "Infinite Stamina (Once)",
-    flag = "InfiniteStamina",
-    tooltip = "Fires stamina refill to server once",
+    text = "Infinite Stamina",
+    flag = "InfiniteStamina_Toggle",
+    tooltip = "Auto-keeps stamina at 500",
     risky = true,
-    confirm = false,
-    callback = function()
-        local stam = character and character:FindFirstChild("Stamina")
-        if not stam then
-            library:SendNotification("Stamina value not found!", 3, Color3.new(1, 0, 0))
-            return
+    callback = function(state)
+        if state then
+            local function hookStamina(char)
+                if not char then return end
+                local stam = char:FindFirstChild("Stamina")
+                if not stam then
+                    task.spawn(function()
+                        stam = char:WaitForChild("Stamina", 5)
+                        if stam and library.flags.InfiniteStamina_Toggle then
+                            safeFireServer(ValChange, stam, 500)
+                            if getgenv().StaminaConn then pcall(function() getgenv().StaminaConn:Disconnect() end) end
+                            getgenv().StaminaConn = stam.Changed:Connect(function(val)
+                                if library.flags.InfiniteStamina_Toggle and val < 500 then
+                                    safeFireServer(ValChange, stam, 500)
+                                end
+                            end)
+                        end
+                    end)
+                    return
+                end
+                safeFireServer(ValChange, stam, 500)
+                if getgenv().StaminaConn then pcall(function() getgenv().StaminaConn:Disconnect() end) end
+                getgenv().StaminaConn = stam.Changed:Connect(function(val)
+                    if library.flags.InfiniteStamina_Toggle and val < 500 then
+                        safeFireServer(ValChange, stam, 500)
+                    end
+                end)
+            end
+
+            hookStamina(getCharacter())
+            if getgenv().StaminaCharConn then pcall(function() getgenv().StaminaCharConn:Disconnect() end) end
+            getgenv().StaminaCharConn = player.CharacterAdded:Connect(function(char)
+                task.wait(0.5)
+                if library.flags.InfiniteStamina_Toggle then
+                    hookStamina(char)
+                end
+            end)
+            library:SendNotification("Infinite Stamina enabled!", 3, Color3.new(0, 1, 0))
+        else
+            if getgenv().StaminaConn then pcall(function() getgenv().StaminaConn:Disconnect() end); getgenv().StaminaConn = nil end
+            if getgenv().StaminaCharConn then pcall(function() getgenv().StaminaCharConn:Disconnect() end); getgenv().StaminaCharConn = nil end
+            library:SendNotification("Infinite Stamina disabled!", 3, Color3.new(1, 1, 0))
         end
-        safeFireServer(ValChange, stam, 1000000)
-        library:SendNotification("Stamina refilled!", 3, Color3.new(0, 1, 0))
     end
 })
 
@@ -550,22 +584,14 @@ sections.Misc:AddToggle({
     risky = false,
     callback = function(state)
         if state then
+            getgenv().NofallRunning = true
             task.spawn(function()
-                pcall(function()
-                    local r = getRoot()
-                    if r and r:CanSetNetworkOwnership() then
-                        r:SetNetworkOwner(player)
-                    end
-                end)
-
-                getgenv().NofallRunning = true
-
-                while getgenv().NofallRunning and task.wait() do
-                    if not library.flags.Nofall_Toggle then break end
+                while getgenv().NofallRunning and library.flags.Nofall_Toggle do
                     local r = getRoot()
                     if not r then
                         pcall(function()
                             character = player.CharacterAdded:Wait()
+                            task.wait(0.5)
                             r = character:WaitForChild("HumanoidRootPart")
                         end)
                     end
@@ -577,6 +603,7 @@ sections.Misc:AddToggle({
                             end
                         end)
                     end
+                    task.wait()
                 end
                 getgenv().NofallRunning = false
             end)
