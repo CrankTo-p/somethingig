@@ -553,29 +553,126 @@ sections.Misc:AddToggle({
     end
 })
 
-sections.Misc:AddButton({
+sections.Misc:AddToggle({
     enabled = true,
     text = "No Combat Tag",
-    flag = "NoCombatTag",
-    tooltip = "Sets combat tag timer to 0 right now",
+    flag = "NoCombatTag_Toggle",
+    tooltip = "Constantly clears combat tag timer",
     risky = true,
-    confirm = false,
-    callback = function()
-        local combatTag = LocalPlayer:FindFirstChild("CombatTag")
-        if combatTag then
-            local Timer = combatTag:FindFirstChild("Timer") or combatTag:WaitForChild("Timer", 2)
-            if Timer then
-                safeFireServer(ValChange, Timer, 0)
-                library:SendNotification("Combat tag cleared!", 3, Color3.new(0, 1, 0))
-            else
-                library:SendNotification("Timer not found!", 3, Color3.new(1, 0, 0))
+    callback = function(state)
+        if state then
+            if getgenv().CombatTagConn then pcall(function() getgenv().CombatTagConn:Disconnect() end) end
+            if getgenv().CombatTagTimerConn then pcall(function() getgenv().CombatTagTimerConn:Disconnect() end) end
+
+            local function hookCombatTag()
+                local combatTag = LocalPlayer:FindFirstChild("CombatTag")
+                if combatTag then
+                    local Timer = combatTag:FindFirstChild("Timer") or combatTag:WaitForChild("Timer", 2)
+                    if Timer then
+                        safeFireServer(ValChange, Timer, 0)
+                        if getgenv().CombatTagTimerConn then pcall(function() getgenv().CombatTagTimerConn:Disconnect() end) end
+                        getgenv().CombatTagTimerConn = Timer.Changed:Connect(function(val)
+                            if library.flags.NoCombatTag_Toggle and val > 0 then
+                                safeFireServer(ValChange, Timer, 0)
+                            end
+                        end)
+                    end
+                end
             end
+
+            hookCombatTag()
+            getgenv().CombatTagConn = LocalPlayer.ChildAdded:Connect(function(child)
+                if child.Name == "CombatTag" and library.flags.NoCombatTag_Toggle then
+                    task.wait(0.05)
+                    hookCombatTag()
+                end
+            end)
+            library:SendNotification("No Combat Tag enabled!", 3, Color3.new(0, 1, 0))
         else
-            library:SendNotification("No combat tag active!", 3, Color3.new(1, 1, 0))
+            if getgenv().CombatTagConn then pcall(function() getgenv().CombatTagConn:Disconnect() end); getgenv().CombatTagConn = nil end
+            if getgenv().CombatTagTimerConn then pcall(function() getgenv().CombatTagTimerConn:Disconnect() end); getgenv().CombatTagTimerConn = nil end
+            library:SendNotification("No Combat Tag disabled!", 3, Color3.new(1, 1, 0))
         end
     end
 })
+local infiniteDmgConns = {}
 
+sections.Combat:AddToggle({
+    enabled = true,
+    text = "Infinite Stand Damage",
+    flag = "InfiniteDamage_Toggle",
+    tooltip = "Sets stand Damage and BarragePercentage to max, monitors for resets",
+    risky = true,
+    callback = function(state)
+        if state then
+            local function hookDamage(stand)
+                if not stand then return end
+                local attrs = stand:FindFirstChild("Attributes")
+                if not attrs then return end
+
+                local dmg = attrs:FindFirstChild("Damage")
+                local barrage = attrs:FindFirstChild("BarragePercentage")
+                local speed = attrs:FindFirstChild("Speed")
+
+                if dmg then
+                    safeFireServer(ValChange, dmg, 9999)
+                    table.insert(infiniteDmgConns, dmg.Changed:Connect(function(v)
+                        if library.flags.InfiniteDamage_Toggle and v < 9999 then
+                            safeFireServer(ValChange, dmg, 9999)
+                        end
+                    end))
+                end
+                if barrage then
+                    safeFireServer(ValChange, barrage, 1)
+                    table.insert(infiniteDmgConns, barrage.Changed:Connect(function(v)
+                        if library.flags.InfiniteDamage_Toggle and v < 1 then
+                            safeFireServer(ValChange, barrage, 1)
+                        end
+                    end))
+                end
+                if speed then
+                    safeFireServer(ValChange, speed, 10)
+                    table.insert(infiniteDmgConns, speed.Changed:Connect(function(v)
+                        if library.flags.InfiniteDamage_Toggle and v < 10 then
+                            safeFireServer(ValChange, speed, 10)
+                        end
+                    end))
+                end
+            end
+
+            local playerStand = getPlayerStand()
+            hookDamage(playerStand)
+
+            table.insert(infiniteDmgConns, workspace.Stands.ChildAdded:Connect(function(child)
+                if child.Name == player.Name and library.flags.InfiniteDamage_Toggle then
+                    task.wait(0.5)
+                    hookDamage(child)
+                end
+            end))
+
+            library:SendNotification("Infinite Stand Damage enabled!", 3, Color3.new(0, 1, 0))
+        else
+            for _, conn in ipairs(infiniteDmgConns) do
+                pcall(function() conn:Disconnect() end)
+            end
+            infiniteDmgConns = {}
+
+            local playerStand = getPlayerStand()
+            if playerStand then
+                local attrs = playerStand:FindFirstChild("Attributes")
+                if attrs then
+                    local dmg = attrs:FindFirstChild("Damage")
+                    local barrage = attrs:FindFirstChild("BarragePercentage")
+                    local speed = attrs:FindFirstChild("Speed")
+                    if dmg then safeFireServer(ValChange, dmg, dmg.Value) end
+                    if barrage then safeFireServer(ValChange, barrage, barrage.Value) end
+                    if speed then safeFireServer(ValChange, speed, speed.Value) end
+                end
+            end
+            library:SendNotification("Infinite Stand Damage disabled!", 3, Color3.new(1, 1, 0))
+        end
+    end
+})
 sections.Misc:AddToggle({
     enabled = true,
     text = "NoFall",
