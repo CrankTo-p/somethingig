@@ -2066,7 +2066,55 @@ local moderatorIds = {
 }
 
 local modDetectorConnection = nil
-
+local timestopWalkConnection = nil
+ 
+sections.Misc:AddToggle({
+    enabled = true,
+    text = "Walk in Timestop",
+    flag = "TimestopWalk_Toggle",
+    tooltip = "Allows movement while timestopped",
+    risky = true,
+    callback = function(state)
+        if state then
+            timestopWalkConnection = RunService.Heartbeat:Connect(function()
+                if not library.flags.TimestopWalk_Toggle then return end
+                local char = getCharacter()
+                if not char then return end
+                local status = char:FindFirstChild("Status")
+                if not status then return end
+                if not status:FindFirstChild("Timestop") then return end
+ 
+                pcall(function()
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") and part.Anchored then
+                            part.Anchored = false
+                        end
+                    end
+ 
+                    local r = getRoot()
+                    local hum = getHumanoid()
+                    if r and hum then
+                        if hum.WalkSpeed < 1 then
+                            hum.WalkSpeed = walkspeedCheat and currentWalkspeed or 16
+                        end
+                        local bv = r:FindFirstChildWhichIsA("BodyVelocity")
+                        if bv then
+                            local currentVel = bv.Velocity
+                            if currentVel.Magnitude < 0.5 and hum.MoveDirection.Magnitude > 0 then
+                                bv.Velocity = hum.MoveDirection * (walkspeedCheat and currentWalkspeed or 16)
+                            end
+                        end
+                    end
+                end)
+            end)
+        else
+            if timestopWalkConnection then
+                pcall(function() timestopWalkConnection:Disconnect() end)
+                timestopWalkConnection = nil
+            end
+        end
+    end
+})
 sections.Misc:AddToggle({
     enabled = true,
     text = "Moderator Detector",
