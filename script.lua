@@ -1137,7 +1137,204 @@ sections.ESPSection:AddSlider({
         hitboxTransparency = v
     end
 })
-
+local espCamera = workspace.CurrentCamera
+local espMouse = player:GetMouse()
+local black = Color3.fromRGB(0, 0, 0)
+local espLibraries = {}
+ 
+local function NewLine(thickness, color)
+    local line = Drawing.new("Line")
+    line.Visible = false
+    line.From = Vector2.new(0, 0)
+    line.To = Vector2.new(0, 0)
+    line.Color = color
+    line.Thickness = thickness
+    line.Transparency = 1
+    return line
+end
+ 
+local function NewQuad(thickness, color)
+    local quad = Drawing.new("Quad")
+    quad.Visible = false
+    quad.PointA = Vector2.new(0, 0)
+    quad.PointB = Vector2.new(0, 0)
+    quad.PointC = Vector2.new(0, 0)
+    quad.PointD = Vector2.new(0, 0)
+    quad.Color = color
+    quad.Filled = false
+    quad.Thickness = thickness
+    quad.Transparency = 1
+    return quad
+end
+ 
+local function NewText(size, color)
+    local text = Drawing.new("Text")
+    text.Visible = false
+    text.Text = ""
+    text.Size = size
+    text.Color = color
+    text.Outline = true
+    text.Center = true
+    text.Position = Vector2.new(0, 0)
+    return text
+end
+ 
+local function SetVisibility(state, lib)
+    for _, obj in pairs(lib) do
+        pcall(function() obj.Visible = state end)
+    end
+end
+ 
+local function RemoveESP(lib)
+    for _, obj in pairs(lib) do
+        pcall(function() obj:Remove() end)
+    end
+end
+ 
+local function CreateESP(plr)
+    local lib = {
+        blacktracer = NewLine(Settings.TracerThickness * 2, black),
+        tracer = NewLine(Settings.TracerThickness, Settings.TracerColor),
+        black = NewQuad(Settings.BoxThickness * 2, black),
+        box = NewQuad(Settings.BoxThickness, Settings.BoxColor),
+        healthbar = NewLine(3, black),
+        greenhealth = NewLine(1.5, black),
+        standLabel = NewText(13, Color3.fromRGB(255, 215, 0)),
+    }
+ 
+    espLibraries[plr] = lib
+ 
+    local connection
+    connection = game:GetService("RunService").RenderStepped:Connect(function()
+        if not library.flags.ESP_Toggle then
+            SetVisibility(false, lib)
+            return
+        end
+ 
+        local char = plr.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local head = char and char:FindFirstChild("Head")
+ 
+        if char and hum and hrp and head and hum.Health > 0 then
+            local humPos, onScreen = espCamera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local headPos = espCamera:WorldToViewportPoint(head.Position)
+                local distY = math.clamp(
+                    (Vector2.new(headPos.X, headPos.Y) - Vector2.new(humPos.X, humPos.Y)).Magnitude,
+                    2, math.huge
+                )
+ 
+                local function SizeQuad(item)
+                    pcall(function()
+                        item.PointA = Vector2.new(humPos.X + distY, humPos.Y - distY * 2)
+                        item.PointB = Vector2.new(humPos.X - distY, humPos.Y - distY * 2)
+                        item.PointC = Vector2.new(humPos.X - distY, humPos.Y + distY * 2)
+                        item.PointD = Vector2.new(humPos.X + distY, humPos.Y + distY * 2)
+                    end)
+                end
+ 
+                SizeQuad(lib.box)
+                SizeQuad(lib.black)
+ 
+                pcall(function()
+                    if Settings.Tracers then
+                        local origin
+                        if Settings.FollowMouse then
+                            origin = Vector2.new(espMouse.X, espMouse.Y + 36)
+                        elseif Settings.TracerOrigin == "Middle" then
+                            origin = espCamera.ViewportSize * 0.5
+                        else
+                            origin = Vector2.new(espCamera.ViewportSize.X * 0.5, espCamera.ViewportSize.Y)
+                        end
+                        lib.tracer.From = origin
+                        lib.blacktracer.From = origin
+                        lib.tracer.To = Vector2.new(humPos.X, humPos.Y + distY * 2)
+                        lib.blacktracer.To = Vector2.new(humPos.X, humPos.Y + distY * 2)
+                    else
+                        lib.tracer.From = Vector2.new(0, 0)
+                        lib.blacktracer.From = Vector2.new(0, 0)
+                        lib.tracer.To = Vector2.new(0, 0)
+                        lib.blacktracer.To = Vector2.new(0, 0)
+                    end
+                end)
+ 
+                pcall(function()
+                    local barHeight = (Vector2.new(humPos.X - distY, humPos.Y - distY * 2) - Vector2.new(humPos.X - distY, humPos.Y + distY * 2)).Magnitude
+                    local healthOffset = hum.Health / hum.MaxHealth * barHeight
+                    lib.greenhealth.From = Vector2.new(humPos.X - distY - 4, humPos.Y + distY * 2)
+                    lib.greenhealth.To = Vector2.new(humPos.X - distY - 4, humPos.Y + distY * 2 - healthOffset)
+                    lib.healthbar.From = Vector2.new(humPos.X - distY - 4, humPos.Y + distY * 2)
+                    lib.healthbar.To = Vector2.new(humPos.X - distY - 4, humPos.Y - distY * 2)
+                    lib.greenhealth.Color = Color3.fromRGB(255, 0, 0):lerp(Color3.fromRGB(0, 255, 0), hum.Health / hum.MaxHealth)
+                end)
+ 
+                pcall(function()
+                    local isStandUser = plr:FindFirstChild("StandUser") ~= nil
+                    lib.standLabel.Text = isStandUser and "[Stand User]" or "[No Stand]"
+                    lib.standLabel.Color = isStandUser and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(180, 180, 180)
+                    lib.standLabel.Position = Vector2.new(humPos.X, humPos.Y - distY * 2 - 16)
+                    lib.standLabel.Visible = true
+                end)
+ 
+                pcall(function()
+                    if TeamSettings.Enabled then
+                        local col = plr.TeamColor == player.TeamColor and TeamSettings.AllyColor or TeamSettings.EnemyColor
+                        lib.tracer.Color = col
+                        lib.box.Color = col
+                    else
+                        lib.tracer.Color = Settings.TracerColor
+                        lib.box.Color = Settings.BoxColor
+                    end
+                end)
+ 
+                SetVisibility(true, lib)
+                lib.standLabel.Visible = true
+            else
+                SetVisibility(false, lib)
+            end
+        else
+            SetVisibility(false, lib)
+            if not Players:FindFirstChild(plr.Name) then
+                pcall(function() connection:Disconnect() end)
+                RemoveESP(lib)
+                espLibraries[plr] = nil
+            end
+        end
+    end)
+end
+ 
+sections.ESPSection:AddToggle({
+    enabled = true,
+    text = "Player ESP",
+    flag = "ESP_Toggle",
+    risky = false,
+    callback = function(state)
+        if state then
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= player and not espLibraries[plr] then
+                    pcall(function() CreateESP(plr) end)
+                end
+            end
+            connections.espAdded = Players.PlayerAdded:Connect(function(plr)
+                pcall(function() CreateESP(plr) end)
+            end)
+            connections.espRemoved = Players.PlayerRemoving:Connect(function(plr)
+                if espLibraries[plr] then
+                    RemoveESP(espLibraries[plr])
+                    espLibraries[plr] = nil
+                end
+            end)
+        else
+            if connections.espAdded then pcall(function() connections.espAdded:Disconnect() end); connections.espAdded = nil end
+            if connections.espRemoved then pcall(function() connections.espRemoved:Disconnect() end); connections.espRemoved = nil end
+            for plr, lib in pairs(espLibraries) do
+                RemoveESP(lib)
+                espLibraries[plr] = nil
+            end
+        end
+    end
+})
 local HeightSlid = 1.473
 local heightConnection = nil
 
