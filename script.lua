@@ -336,6 +336,61 @@ sections.Combat:AddSlider({
     end
 })
 
+local standSpeedCheat = false
+local standSpeedRunning = false
+local currentStandSpeed = 1
+
+sections.Combat:AddSeparator({ text = "Stand Speed" })
+
+sections.Combat:AddToggle({
+    enabled = true,
+    text = "Stand Speed",
+    flag = "StandSpeed_Toggle",
+    callback = function(value)
+        standSpeedCheat = value
+        if value then
+            standSpeedRunning = true
+            task.spawn(function()
+                while standSpeedRunning do
+                    if standSpeedCheat then
+                        pcall(function()
+                            local standsFolder = workspace:FindFirstChild("Stands")
+                            local playerStand = standsFolder and standsFolder:FindFirstChild(player.Name)
+                            if playerStand then
+                                local hrp = playerStand:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    local bv = hrp:FindFirstChildWhichIsA("BodyVelocity")
+                                    if bv then
+                                        local mag = bv.Velocity.Magnitude
+                                        if mag > 0.1 then
+                                            bv.Velocity = bv.Velocity.Unit * (mag * currentStandSpeed)
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+                    end
+                    task.wait()
+                end
+            end)
+        else
+            standSpeedRunning = false
+        end
+    end
+})
+
+sections.Combat:AddSlider({
+    text = "Stand Speed Multiplier",
+    flag = "StandSpeed_Value",
+    value = 1,
+    min = 1,
+    max = 10,
+    increment = 0.1,
+    callback = function(v)
+        currentStandSpeed = v
+    end
+})
+
 sections.Combat:AddToggle({
     enabled = true,
     text = "Infinite Jump",
@@ -595,13 +650,29 @@ sections.Misc:AddToggle({
         end
     end
 })
+
 local infiniteDmgConns = {}
+local currentStandDamage = 100
+
+sections.Combat:AddSeparator({ text = "Stand Damage" })
+
+sections.Combat:AddSlider({
+    text = "Stand Damage Value",
+    flag = "StandDamage_Value",
+    value = 100,
+    min = 10,
+    max = 1000,
+    increment = 1,
+    callback = function(v)
+        currentStandDamage = v
+    end
+})
 
 sections.Combat:AddToggle({
     enabled = true,
-    text = "Infinite Stand Damage",
+    text = "Stand Damage Override",
     flag = "InfiniteDamage_Toggle",
-    tooltip = "Sets stand Damage and BarragePercentage to max, monitors for resets",
+    tooltip = "Forces stand Damage and BarragePercentage to slider value",
     risky = true,
     callback = function(state)
         if state then
@@ -615,10 +686,10 @@ sections.Combat:AddToggle({
                 local speed = attrs:FindFirstChild("Speed")
 
                 if dmg then
-                    safeFireServer(ValChange, dmg, 9999)
+                    safeFireServer(ValChange, dmg, currentStandDamage)
                     table.insert(infiniteDmgConns, dmg.Changed:Connect(function(v)
-                        if library.flags.InfiniteDamage_Toggle and v < 9999 then
-                            safeFireServer(ValChange, dmg, 9999)
+                        if library.flags.InfiniteDamage_Toggle and v ~= currentStandDamage then
+                            safeFireServer(ValChange, dmg, currentStandDamage)
                         end
                     end))
                 end
@@ -643,36 +714,26 @@ sections.Combat:AddToggle({
             local playerStand = getPlayerStand()
             hookDamage(playerStand)
 
-            table.insert(infiniteDmgConns, workspace.Stands.ChildAdded:Connect(function(child)
-                if child.Name == player.Name and library.flags.InfiniteDamage_Toggle then
-                    task.wait(0.5)
-                    hookDamage(child)
-                end
-            end))
+            pcall(function()
+                table.insert(infiniteDmgConns, workspace.Stands.ChildAdded:Connect(function(child)
+                    if child.Name == player.Name and library.flags.InfiniteDamage_Toggle then
+                        task.wait(0.5)
+                        hookDamage(child)
+                    end
+                end))
+            end)
 
-            library:SendNotification("Infinite Stand Damage enabled!", 3, Color3.new(0, 1, 0))
+            library:SendNotification("Stand Damage Override enabled! (" .. currentStandDamage .. ")", 3, Color3.new(0, 1, 0))
         else
             for _, conn in ipairs(infiniteDmgConns) do
                 pcall(function() conn:Disconnect() end)
             end
             infiniteDmgConns = {}
-
-            local playerStand = getPlayerStand()
-            if playerStand then
-                local attrs = playerStand:FindFirstChild("Attributes")
-                if attrs then
-                    local dmg = attrs:FindFirstChild("Damage")
-                    local barrage = attrs:FindFirstChild("BarragePercentage")
-                    local speed = attrs:FindFirstChild("Speed")
-                    if dmg then safeFireServer(ValChange, dmg, dmg.Value) end
-                    if barrage then safeFireServer(ValChange, barrage, barrage.Value) end
-                    if speed then safeFireServer(ValChange, speed, speed.Value) end
-                end
-            end
-            library:SendNotification("Infinite Stand Damage disabled!", 3, Color3.new(1, 1, 0))
+            library:SendNotification("Stand Damage Override disabled!", 3, Color3.new(1, 1, 0))
         end
     end
 })
+
 sections.Misc:AddToggle({
     enabled = true,
     text = "NoFall",
@@ -1137,11 +1198,12 @@ sections.ESPSection:AddSlider({
         hitboxTransparency = v
     end
 })
+
 local espCamera = workspace.CurrentCamera
 local espMouse = player:GetMouse()
 local black = Color3.fromRGB(0, 0, 0)
 local espLibraries = {}
- 
+
 local function NewLine(thickness, color)
     local line = Drawing.new("Line")
     line.Visible = false
@@ -1152,7 +1214,7 @@ local function NewLine(thickness, color)
     line.Transparency = 1
     return line
 end
- 
+
 local function NewQuad(thickness, color)
     local quad = Drawing.new("Quad")
     quad.Visible = false
@@ -1166,7 +1228,7 @@ local function NewQuad(thickness, color)
     quad.Transparency = 1
     return quad
 end
- 
+
 local function NewText(size, color)
     local text = Drawing.new("Text")
     text.Visible = false
@@ -1178,19 +1240,19 @@ local function NewText(size, color)
     text.Position = Vector2.new(0, 0)
     return text
 end
- 
+
 local function SetVisibility(state, lib)
     for _, obj in pairs(lib) do
         pcall(function() obj.Visible = state end)
     end
 end
- 
+
 local function RemoveESP(lib)
     for _, obj in pairs(lib) do
         pcall(function() obj:Remove() end)
     end
 end
- 
+
 local function CreateESP(plr)
     local lib = {
         blacktracer = NewLine(Settings.TracerThickness * 2, black),
@@ -1201,21 +1263,21 @@ local function CreateESP(plr)
         greenhealth = NewLine(1.5, black),
         standLabel = NewText(13, Color3.fromRGB(255, 215, 0)),
     }
- 
+
     espLibraries[plr] = lib
- 
+
     local connection
     connection = game:GetService("RunService").RenderStepped:Connect(function()
         if not library.flags.ESP_Toggle then
             SetVisibility(false, lib)
             return
         end
- 
+
         local char = plr.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local head = char and char:FindFirstChild("Head")
- 
+
         if char and hum and hrp and head and hum.Health > 0 then
             local humPos, onScreen = espCamera:WorldToViewportPoint(hrp.Position)
             if onScreen then
@@ -1224,7 +1286,7 @@ local function CreateESP(plr)
                     (Vector2.new(headPos.X, headPos.Y) - Vector2.new(humPos.X, humPos.Y)).Magnitude,
                     2, math.huge
                 )
- 
+
                 local function SizeQuad(item)
                     pcall(function()
                         item.PointA = Vector2.new(humPos.X + distY, humPos.Y - distY * 2)
@@ -1233,10 +1295,10 @@ local function CreateESP(plr)
                         item.PointD = Vector2.new(humPos.X + distY, humPos.Y + distY * 2)
                     end)
                 end
- 
+
                 SizeQuad(lib.box)
                 SizeQuad(lib.black)
- 
+
                 pcall(function()
                     if Settings.Tracers then
                         local origin
@@ -1258,7 +1320,7 @@ local function CreateESP(plr)
                         lib.blacktracer.To = Vector2.new(0, 0)
                     end
                 end)
- 
+
                 pcall(function()
                     local barHeight = (Vector2.new(humPos.X - distY, humPos.Y - distY * 2) - Vector2.new(humPos.X - distY, humPos.Y + distY * 2)).Magnitude
                     local healthOffset = hum.Health / hum.MaxHealth * barHeight
@@ -1268,7 +1330,7 @@ local function CreateESP(plr)
                     lib.healthbar.To = Vector2.new(humPos.X - distY - 4, humPos.Y - distY * 2)
                     lib.greenhealth.Color = Color3.fromRGB(255, 0, 0):lerp(Color3.fromRGB(0, 255, 0), hum.Health / hum.MaxHealth)
                 end)
- 
+
                 pcall(function()
                     local isStandUser = plr:FindFirstChild("StandUser") ~= nil
                     lib.standLabel.Text = isStandUser and "[Stand User]" or "[No Stand]"
@@ -1276,7 +1338,7 @@ local function CreateESP(plr)
                     lib.standLabel.Position = Vector2.new(humPos.X, humPos.Y - distY * 2 - 16)
                     lib.standLabel.Visible = true
                 end)
- 
+
                 pcall(function()
                     if TeamSettings.Enabled then
                         local col = plr.TeamColor == player.TeamColor and TeamSettings.AllyColor or TeamSettings.EnemyColor
@@ -1287,7 +1349,7 @@ local function CreateESP(plr)
                         lib.box.Color = Settings.BoxColor
                     end
                 end)
- 
+
                 SetVisibility(true, lib)
                 lib.standLabel.Visible = true
             else
@@ -1303,7 +1365,7 @@ local function CreateESP(plr)
         end
     end)
 end
- 
+
 sections.ESPSection:AddToggle({
     enabled = true,
     text = "Player ESP",
@@ -1335,6 +1397,85 @@ sections.ESPSection:AddToggle({
         end
     end
 })
+
+local toolESPLabels = {}
+local toolESPConnection = nil
+
+sections.ESPSection:AddToggle({
+    enabled = true,
+    text = "Tool ESP",
+    flag = "ToolESP_Toggle",
+    risky = false,
+    callback = function(state)
+        if state then
+            toolESPConnection = RunService.RenderStepped:Connect(function()
+                if not library.flags.ToolESP_Toggle then return end
+
+                local seenTools = {}
+
+                pcall(function()
+                    for _, obj in ipairs(workspace:GetDescendants()) do
+                        if obj:IsA("Tool") and obj.Parent ~= nil and not obj.Parent:IsA("Backpack") then
+                            local handle = obj:FindFirstChild("Handle")
+                            if not handle then
+                                for _, child in ipairs(obj:GetChildren()) do
+                                    if child:IsA("BasePart") then handle = child break end
+                                end
+                            end
+                            if not handle then continue end
+
+                            local pos, onScreen = espCamera:WorldToViewportPoint(handle.Position)
+                            seenTools[obj] = true
+
+                            if not toolESPLabels[obj] then
+                                local nameLabel = NewText(14, Color3.fromRGB(255, 255, 255))
+                                local distLabel = NewText(11, Color3.fromRGB(200, 200, 200))
+                                toolESPLabels[obj] = { nameLabel = nameLabel, distLabel = distLabel }
+                            end
+
+                            local labels = toolESPLabels[obj]
+
+                            if onScreen then
+                                local charRoot = getRoot()
+                                local dist = charRoot and math.floor((charRoot.Position - handle.Position).Magnitude) or 0
+
+                                labels.nameLabel.Text = obj.Name
+                                labels.nameLabel.Position = Vector2.new(pos.X, pos.Y - 10)
+                                labels.nameLabel.Visible = true
+
+                                labels.distLabel.Text = dist .. "m"
+                                labels.distLabel.Position = Vector2.new(pos.X, pos.Y + 4)
+                                labels.distLabel.Visible = true
+                            else
+                                labels.nameLabel.Visible = false
+                                labels.distLabel.Visible = false
+                            end
+                        end
+                    end
+                end)
+
+                for tool, labels in pairs(toolESPLabels) do
+                    if not seenTools[tool] then
+                        pcall(function() labels.nameLabel:Remove() end)
+                        pcall(function() labels.distLabel:Remove() end)
+                        toolESPLabels[tool] = nil
+                    end
+                end
+            end)
+        else
+            if toolESPConnection then
+                pcall(function() toolESPConnection:Disconnect() end)
+                toolESPConnection = nil
+            end
+            for tool, labels in pairs(toolESPLabels) do
+                pcall(function() labels.nameLabel:Remove() end)
+                pcall(function() labels.distLabel:Remove() end)
+            end
+            toolESPLabels = {}
+        end
+    end
+})
+
 local HeightSlid = 1.473
 local heightConnection = nil
 
@@ -1474,12 +1615,6 @@ player.CharacterAdded:Connect(function(newChar)
 
     pcall(function() inventoryLocations[2] = newChar end)
 
-    local stam = newChar:FindFirstChild("Stamina")
-    if stam then
-        local ToChange = stam
-        _ = ToChange
-    end
-
     if walkspeedCheat then pcall(function() humanoid.WalkSpeed = currentWalkspeed end) end
     if jumppowerCheat then pcall(function() humanoid.JumpPower = currentJumppower end) end
 
@@ -1510,6 +1645,7 @@ local function SaveSettings()
         WalkspeedValue = currentWalkspeed,
         JumppowerValue = currentJumppower,
         HitboxTransparency = hitboxTransparency,
+        StandDamageValue = currentStandDamage,
         TrackedItems = getgenv().TrackedItems
     }
     local success, err = pcall(function()
@@ -1541,6 +1677,7 @@ local function LoadSettings()
         if result.CustomSettings.WalkspeedValue then currentWalkspeed = result.CustomSettings.WalkspeedValue end
         if result.CustomSettings.JumppowerValue then currentJumppower = result.CustomSettings.JumppowerValue end
         if result.CustomSettings.HitboxTransparency then hitboxTransparency = result.CustomSettings.HitboxTransparency end
+        if result.CustomSettings.StandDamageValue then currentStandDamage = result.CustomSettings.StandDamageValue end
         if result.CustomSettings.TrackedItems then getgenv().TrackedItems = result.CustomSettings.TrackedItems end
     end
     library:SendNotification("Settings loaded successfully!", 3, Color3.new(0, 1, 0))
@@ -1687,6 +1824,7 @@ sections.Settings:AddButton({
             WalkspeedValue = currentWalkspeed,
             JumppowerValue = currentJumppower,
             HitboxTransparency = hitboxTransparency,
+            StandDamageValue = currentStandDamage,
             TrackedItems = getgenv().TrackedItems
         }
         local fileName = "JJBADL_" .. ConfigName .. ".json"
@@ -1732,6 +1870,7 @@ sections.Settings:AddButton({
                 if result.CustomSettings.WalkspeedValue then currentWalkspeed = result.CustomSettings.WalkspeedValue end
                 if result.CustomSettings.JumppowerValue then currentJumppower = result.CustomSettings.JumppowerValue end
                 if result.CustomSettings.HitboxTransparency then hitboxTransparency = result.CustomSettings.HitboxTransparency end
+                if result.CustomSettings.StandDamageValue then currentStandDamage = result.CustomSettings.StandDamageValue end
                 if result.CustomSettings.TrackedItems then getgenv().TrackedItems = result.CustomSettings.TrackedItems end
             end
             library:SendNotification("Config '" .. ConfigName .. "' loaded!", 3, Color3.new(0, 1, 0))
@@ -2067,7 +2206,7 @@ local moderatorIds = {
 
 local modDetectorConnection = nil
 local timestopWalkConnection = nil
- 
+
 sections.Misc:AddToggle({
     enabled = true,
     text = "Walk in Timestop",
@@ -2083,14 +2222,14 @@ sections.Misc:AddToggle({
                 local status = char:FindFirstChild("Status")
                 if not status then return end
                 if not status:FindFirstChild("Timestop") then return end
- 
+
                 pcall(function()
                     for _, part in ipairs(char:GetDescendants()) do
                         if part:IsA("BasePart") and part.Anchored then
                             part.Anchored = false
                         end
                     end
- 
+
                     local r = getRoot()
                     local hum = getHumanoid()
                     if r and hum then
@@ -2115,6 +2254,7 @@ sections.Misc:AddToggle({
         end
     end
 })
+
 sections.Misc:AddToggle({
     enabled = true,
     text = "Moderator Detector",
