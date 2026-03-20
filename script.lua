@@ -200,6 +200,184 @@ sections.Visual:AddToggle({
     end
 })
 
+sections.Visual:AddSeparator({ text = "Camera" })
+
+local freecamActive = false
+local freecamConnection = nil
+local freecamPart = nil
+
+sections.Visual:AddToggle({
+    enabled = true,
+    text = "Freecam",
+    flag = "Freecam_Toggle",
+    risky = false,
+    callback = function(state)
+        freecamActive = state
+        local cam = workspace.CurrentCamera
+        if state then
+            pcall(function()
+                cam.CameraType = Enum.CameraType.Scriptable
+
+                freecamPart = Instance.new("Part")
+                freecamPart.Anchored = true
+                freecamPart.CanCollide = false
+                freecamPart.Transparency = 1
+                freecamPart.Size = Vector3.new(1, 1, 1)
+                freecamPart.CFrame = cam.CFrame
+                freecamPart.Parent = workspace
+
+                cam.CFrame = freecamPart.CFrame
+
+                local speed = 1
+                local shiftSpeed = 3
+                local moveKeys = {
+                    [Enum.KeyCode.W] = Vector3.new(0, 0, -1),
+                    [Enum.KeyCode.S] = Vector3.new(0, 0, 1),
+                    [Enum.KeyCode.A] = Vector3.new(-1, 0, 0),
+                    [Enum.KeyCode.D] = Vector3.new(1, 0, 0),
+                    [Enum.KeyCode.E] = Vector3.new(0, 1, 0),
+                    [Enum.KeyCode.Q] = Vector3.new(0, -1, 0),
+                    [Enum.KeyCode.Space] = Vector3.new(0, 1, 0),
+                    [Enum.KeyCode.LeftControl] = Vector3.new(0, -1, 0),
+                }
+
+                freecamConnection = RunService.RenderStepped:Connect(function(dt)
+                    if not library.flags.Freecam_Toggle then return end
+                    pcall(function()
+                        local moveDir = Vector3.new()
+                        local currentSpeed = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and shiftSpeed or speed
+
+                        for key, dir in pairs(moveKeys) do
+                            if UserInputService:IsKeyDown(key) then
+                                moveDir = moveDir + dir
+                            end
+                        end
+
+                        if moveDir.Magnitude > 0 then
+                            moveDir = moveDir.Unit
+                        end
+
+                        local cf = freecamPart.CFrame
+                        freecamPart.CFrame = cf * CFrame.new(moveDir * currentSpeed * dt * 60)
+                        cam.CFrame = freecamPart.CFrame
+                    end)
+                end)
+            end)
+        else
+            if freecamConnection then
+                pcall(function() freecamConnection:Disconnect() end)
+                freecamConnection = nil
+            end
+            if freecamPart then
+                pcall(function() freecamPart:Destroy() end)
+                freecamPart = nil
+            end
+            pcall(function()
+                cam.CameraType = Enum.CameraType.Custom
+                local hum = getHumanoid()
+                if hum then cam.CameraSubject = hum end
+            end)
+        end
+    end
+})
+
+local spectateTarget = nil
+local spectateConnection = nil
+
+local spectateDropdown
+
+local function refreshSpectateList()
+    if not spectateDropdown then return end
+    pcall(function()
+        spectateDropdown:ClearValues()
+        spectateDropdown:AddValue("Myself")
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then
+                spectateDropdown:AddValue(plr.Name)
+            end
+        end
+    end)
+end
+
+local function doSpectate(name)
+    if spectateConnection then
+        pcall(function() spectateConnection:Disconnect() end)
+        spectateConnection = nil
+    end
+    local cam = workspace.CurrentCamera
+    if name == "Myself" or name == nil then
+        spectateTarget = nil
+        pcall(function()
+            cam.CameraType = Enum.CameraType.Custom
+            local char = player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                cam.CameraSubject = hum
+            end
+        end)
+        return
+    end
+    local target = Players:FindFirstChild(name)
+    if not target then return end
+    spectateTarget = target
+    pcall(function()
+        cam.CameraType = Enum.CameraType.Custom
+        local char = target.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then cam.CameraSubject = hum end
+    end)
+    spectateConnection = Players.PlayerRemoving:Connect(function(plr)
+        if plr == spectateTarget then
+            doSpectate("Myself")
+            if spectateDropdown then
+                pcall(function() spectateDropdown:Select("Myself") end)
+            end
+            refreshSpectateList()
+        end
+    end)
+end
+
+sections.Visual:AddSeparator({ text = "Spectate" })
+
+spectateDropdown = sections.Visual:AddList({
+    enabled = true,
+    text = "Spectate Player",
+    flag = "Spectate_List",
+    values = {"Myself"},
+    selected = "Myself",
+    callback = function(name)
+        doSpectate(name)
+    end
+})
+
+sections.Visual:AddButton({
+    enabled = true,
+    text = "Refresh Player List",
+    flag = "Spectate_Refresh",
+    risky = false,
+    confirm = false,
+    callback = function()
+        refreshSpectateList()
+        library:SendNotification("Player list refreshed!", 2, Color3.new(0, 1, 0))
+    end
+})
+
+pcall(function()
+    Players.PlayerAdded:Connect(function()
+        task.wait(1)
+        refreshSpectateList()
+    end)
+    Players.PlayerRemoving:Connect(function()
+        task.wait(0.1)
+        refreshSpectateList()
+    end)
+end)
+
+task.spawn(function()
+    task.wait(2)
+    refreshSpectateList()
+end)
+
 local function safeFireServer(remote, ...)
     if not remote then return end
     local args = table.pack(...)
