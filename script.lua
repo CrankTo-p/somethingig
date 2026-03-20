@@ -103,6 +103,10 @@ local inventoryLocations = {
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/CrankTo-p/Informantsadasdsad/refs/heads/main/informant.wtf%20Lib%20Source.lua"))()
 library:init()
 
+pcall(function()
+    game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, false)
+end)
+
 local Window = library.NewWindow({
     title = "JJBAD Paid Script",
     size = UDim2.new(0, 525, 0, 650)
@@ -120,6 +124,74 @@ local sections = {
     Visual = tabs.ESPTab:AddSection("Visual", 2),
     ESPSection = tabs.ESPTab:AddSection("ESP", 1),
 }
+
+local originalLighting = {}
+
+sections.Visual:AddToggle({
+    enabled = true,
+    text = "Fullbright",
+    flag = "Fullbright_Toggle",
+    risky = false,
+    callback = function(state)
+        pcall(function()
+            local Lighting = game:GetService("Lighting")
+            if state then
+                originalLighting.Brightness = Lighting.Brightness
+                originalLighting.ClockTime = Lighting.ClockTime
+                originalLighting.FogEnd = Lighting.FogEnd
+                originalLighting.GlobalShadows = Lighting.GlobalShadows
+                originalLighting.Ambient = Lighting.Ambient
+                originalLighting.OutdoorAmbient = Lighting.OutdoorAmbient
+                Lighting.Brightness = 2
+                Lighting.ClockTime = 14
+                Lighting.GlobalShadows = false
+                Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+                Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+                for _, fx in ipairs(Lighting:GetChildren()) do
+                    if fx:IsA("BlurEffect") or fx:IsA("ColorCorrectionEffect") or fx:IsA("SunRaysEffect") or fx:IsA("DepthOfFieldEffect") then
+                        pcall(function() fx.Enabled = false end)
+                    end
+                end
+            else
+                if originalLighting.Brightness then Lighting.Brightness = originalLighting.Brightness end
+                if originalLighting.ClockTime then Lighting.ClockTime = originalLighting.ClockTime end
+                if originalLighting.GlobalShadows ~= nil then Lighting.GlobalShadows = originalLighting.GlobalShadows end
+                if originalLighting.Ambient then Lighting.Ambient = originalLighting.Ambient end
+                if originalLighting.OutdoorAmbient then Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient end
+                for _, fx in ipairs(Lighting:GetChildren()) do
+                    if fx:IsA("BlurEffect") or fx:IsA("ColorCorrectionEffect") or fx:IsA("SunRaysEffect") or fx:IsA("DepthOfFieldEffect") then
+                        pcall(function() fx.Enabled = true end)
+                    end
+                end
+            end
+        end)
+    end
+})
+
+local originalFog = {}
+
+sections.Visual:AddToggle({
+    enabled = true,
+    text = "No Fog",
+    flag = "NoFog_Toggle",
+    risky = false,
+    callback = function(state)
+        pcall(function()
+            local Lighting = game:GetService("Lighting")
+            if state then
+                originalFog.FogEnd = Lighting.FogEnd
+                originalFog.FogStart = Lighting.FogStart
+                originalFog.FogColor = Lighting.FogColor
+                Lighting.FogEnd = 100000
+                Lighting.FogStart = 100000
+            else
+                if originalFog.FogEnd then Lighting.FogEnd = originalFog.FogEnd end
+                if originalFog.FogStart then Lighting.FogStart = originalFog.FogStart end
+                if originalFog.FogColor then Lighting.FogColor = originalFog.FogColor end
+            end
+        end)
+    end
+})
 
 local function safeFireServer(remote, ...)
     if not remote then return end
@@ -1412,10 +1484,11 @@ sections.ESPSection:AddToggle({
                 if not library.flags.ToolESP_Toggle then return end
 
                 local seenTools = {}
+                local charRoot = getRoot()
 
                 pcall(function()
                     for _, obj in ipairs(workspace:GetDescendants()) do
-                        if obj:IsA("Tool") and obj.Parent ~= nil and not obj.Parent:IsA("Backpack") then
+                        if obj:IsA("Tool") and obj.Parent ~= nil and not obj.Parent:IsA("Backpack") and not obj.Parent:IsA("Model") then
                             local handle = obj:FindFirstChild("Handle")
                             if not handle then
                                 for _, child in ipairs(obj:GetChildren()) do
@@ -1423,6 +1496,16 @@ sections.ESPSection:AddToggle({
                                 end
                             end
                             if not handle then continue end
+
+                            local dist = charRoot and (charRoot.Position - handle.Position).Magnitude or math.huge
+                            if dist > 1000 then
+                                if toolESPLabels[obj] then
+                                    pcall(function() toolESPLabels[obj].nameLabel:Remove() end)
+                                    pcall(function() toolESPLabels[obj].distLabel:Remove() end)
+                                    toolESPLabels[obj] = nil
+                                end
+                                continue
+                            end
 
                             local pos, onScreen = espCamera:WorldToViewportPoint(handle.Position)
                             seenTools[obj] = true
@@ -1436,14 +1519,11 @@ sections.ESPSection:AddToggle({
                             local labels = toolESPLabels[obj]
 
                             if onScreen then
-                                local charRoot = getRoot()
-                                local dist = charRoot and math.floor((charRoot.Position - handle.Position).Magnitude) or 0
-
                                 labels.nameLabel.Text = obj.Name
                                 labels.nameLabel.Position = Vector2.new(pos.X, pos.Y - 10)
                                 labels.nameLabel.Visible = true
 
-                                labels.distLabel.Text = dist .. "m"
+                                labels.distLabel.Text = math.floor(dist) .. "m"
                                 labels.distLabel.Position = Vector2.new(pos.X, pos.Y + 4)
                                 labels.distLabel.Visible = true
                             else
