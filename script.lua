@@ -1,6 +1,6 @@
 getgenv().Config = {
-    Invite = "Mossad.wtf",
-    Version = "1.0",
+    Invite = "informant.wtf",
+    Version = "0.0",
 }
 
 getgenv().luaguardvars = {
@@ -744,6 +744,16 @@ sections.Combat:AddSlider({
     increment = 1,
     callback = function(v)
         currentStandDamage = v
+        if library.flags.InfiniteDamage_Toggle then
+            pcall(function()
+                local playerStand = getPlayerStand()
+                if not playerStand then return end
+                local attrs = playerStand:FindFirstChild("Attributes")
+                if not attrs then return end
+                local dmg = attrs:FindFirstChild("Damage")
+                if dmg then safeFireServer(ValChange, dmg, v) end
+            end)
+        end
     end
 })
 
