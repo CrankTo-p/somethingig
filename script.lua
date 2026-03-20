@@ -1,6 +1,6 @@
 getgenv().Config = {
-    Invite = "informant.wtf",
-    Version = "0.0",
+    Invite = "Mossad.wtf",
+    Version = "1.0",
 }
 
 getgenv().luaguardvars = {
@@ -63,6 +63,13 @@ local Settings = {
     FollowMouse = false,
     Tracers = true
 }
+
+local espTracersEnabled = true
+local espRangeLimited = false
+local espMaxRange = 500
+local proximityAlertActive = false
+local proximityAlertConnection = nil
+local proximityAlertGui = nil
 
 local TeamSettings = {
     Enabled = false,
@@ -1276,6 +1283,187 @@ local espMouse = player:GetMouse()
 local black = Color3.fromRGB(0, 0, 0)
 local espLibraries = {}
 
+local standColors = {
+    ["Magician's Red"]             = Color3.fromRGB(220, 40,  40),
+    ["Star Platinum"]              = Color3.fromRGB(130, 100, 220),
+    ["Hermit Purple"]              = Color3.fromRGB(140, 60,  180),
+    ["Hierophant Green"]           = Color3.fromRGB(60,  200, 100),
+    ["Silver Chariot"]             = Color3.fromRGB(200, 200, 220),
+    ["The Fool"]                   = Color3.fromRGB(200, 170, 90),
+    ["The World"]                  = Color3.fromRGB(230, 220, 80),
+    ["Tower of Grey"]              = Color3.fromRGB(160, 160, 160),
+    ["Dark Blue Moon"]             = Color3.fromRGB(40,  80,  200),
+    ["Ebony Devil"]                = Color3.fromRGB(180, 30,  30),
+    ["Yellow Temperance"]          = Color3.fromRGB(230, 210, 30),
+    ["Hanged Man"]                 = Color3.fromRGB(220, 200, 100),
+    ["Death Thirteen"]             = Color3.fromRGB(80,  40,  120),
+    ["Emperor"]                    = Color3.fromRGB(220, 130, 50),
+    ["Empress"]                    = Color3.fromRGB(200, 80,  160),
+    ["Wheel of Fortune"]           = Color3.fromRGB(180, 100, 40),
+    ["Justice"]                    = Color3.fromRGB(230, 230, 200),
+    ["Lovers"]                     = Color3.fromRGB(230, 120, 180),
+    ["Sun"]                        = Color3.fromRGB(255, 200, 50),
+    ["Judgement"]                  = Color3.fromRGB(60,  180, 80),
+    ["High Priestess"]             = Color3.fromRGB(100, 200, 220),
+    ["Geb"]                        = Color3.fromRGB(60,  140, 210),
+    ["Khnum"]                      = Color3.fromRGB(200, 160, 100),
+    ["Tohth"]                      = Color3.fromRGB(80,  60,  160),
+    ["Anubis"]                     = Color3.fromRGB(80,  80,  80),
+    ["Bastet"]                     = Color3.fromRGB(220, 170, 60),
+    ["Sethan"]                     = Color3.fromRGB(150, 50,  200),
+    ["Osiris"]                     = Color3.fromRGB(60,  160, 140),
+    ["Horus"]                      = Color3.fromRGB(100, 160, 220),
+    ["Atum"]                       = Color3.fromRGB(180, 140, 60),
+    ["Tenore Sax"]                 = Color3.fromRGB(200, 100, 80),
+    ["Cream"]                      = Color3.fromRGB(240, 230, 200),
+    ["Crazy Diamond"]              = Color3.fromRGB(230, 80,  130),
+    ["The Hand"]                   = Color3.fromRGB(130, 80,  50),
+    ["Echoes ACT 0"]               = Color3.fromRGB(80,  160, 80),
+    ["Echoes ACT 1"]               = Color3.fromRGB(80,  180, 100),
+    ["Echoes ACT 2"]               = Color3.fromRGB(60,  200, 120),
+    ["Echoes ACT 3"]               = Color3.fromRGB(40,  220, 140),
+    ["Heaven's Door"]              = Color3.fromRGB(200, 160, 220),
+    ["Killer Queen"]               = Color3.fromRGB(200, 180, 220),
+    ["Aqua Necklace"]              = Color3.fromRGB(60,  200, 220),
+    ["Bad Company"]                = Color3.fromRGB(80,  120, 60),
+    ["Red Hot Chili Pepper"]       = Color3.fromRGB(220, 60,  40),
+    ["The Lock"]                   = Color3.fromRGB(100, 100, 100),
+    ["Surface"]                    = Color3.fromRGB(160, 140, 100),
+    ["Love Deluxe"]                = Color3.fromRGB(220, 120, 160),
+    ["Pearl Jam"]                  = Color3.fromRGB(200, 220, 180),
+    ["Achtung Baby"]               = Color3.fromRGB(200, 200, 200),
+    ["Ratt"]                       = Color3.fromRGB(160, 80,  60),
+    ["Harvest"]                    = Color3.fromRGB(120, 180, 60),
+    ["Cinderella"]                 = Color3.fromRGB(200, 180, 230),
+    ["Atom Heart Father"]          = Color3.fromRGB(220, 200, 100),
+    ["Boy II Man"]                 = Color3.fromRGB(80,  80,  200),
+    ["Highway Star"]               = Color3.fromRGB(180, 60,  220),
+    ["Enigma"]                     = Color3.fromRGB(100, 60,  140),
+    ["Cheap Trick"]                = Color3.fromRGB(180, 60,  80),
+    ["Gold Experience"]            = Color3.fromRGB(200, 210, 60),
+    ["Sticky Fingers"]             = Color3.fromRGB(100, 140, 200),
+    ["Moody Blues"]                = Color3.fromRGB(60,  100, 200),
+    ["Six Pistols"]                = Color3.fromRGB(180, 130, 60),
+    ["Aerosmith"]                  = Color3.fromRGB(60,  120, 60),
+    ["Purple Haze"]                = Color3.fromRGB(160, 60,  200),
+    ["Purple Haze: Distortion"]    = Color3.fromRGB(180, 40,  220),
+    ["Spice Girl"]                 = Color3.fromRGB(230, 120, 80),
+    ["Crippled Silver Chariot"]    = Color3.fromRGB(180, 180, 200),
+    ["Mr. President"]              = Color3.fromRGB(60,  160, 100),
+    ["Chariot Requiem"]            = Color3.fromRGB(80,  80,  80),
+    ["Gold Experience Requiem"]    = Color3.fromRGB(220, 230, 80),
+    ["King Crimson"]               = Color3.fromRGB(200, 30,  60),
+    ["Black Sabbath"]              = Color3.fromRGB(60,  40,  80),
+    ["Soft Machine"]               = Color3.fromRGB(140, 180, 200),
+    ["Kraft Work"]                 = Color3.fromRGB(80,  160, 180),
+    ["Little Feet"]                = Color3.fromRGB(220, 160, 80),
+    ["Man in the Mirror"]          = Color3.fromRGB(180, 200, 230),
+    ["Beach Boy"]                  = Color3.fromRGB(60,  180, 220),
+    ["The Grateful Dead"]          = Color3.fromRGB(100, 160, 80),
+    ["Baby Face"]                  = Color3.fromRGB(220, 200, 180),
+    ["White Album"]                = Color3.fromRGB(230, 230, 230),
+    ["Clash"]                      = Color3.fromRGB(60,  200, 180),
+    ["Talking Head"]               = Color3.fromRGB(200, 160, 120),
+    ["Notorious B.I.G"]            = Color3.fromRGB(80,  80,  80),
+    ["Metallica"]                  = Color3.fromRGB(160, 160, 60),
+    ["Green Day"]                  = Color3.fromRGB(80,  200, 60),
+    ["Oasis"]                      = Color3.fromRGB(100, 180, 220),
+    ["Rolling Stones"]             = Color3.fromRGB(180, 160, 140),
+    ["Stone Free"]                 = Color3.fromRGB(80,  200, 160),
+    ["Kiss"]                       = Color3.fromRGB(220, 60,  80),
+    ["Burning Down the House"]     = Color3.fromRGB(220, 120, 40),
+    ["Foo Fighters"]               = Color3.fromRGB(60,  200, 200),
+    ["Weather Report"]             = Color3.fromRGB(80,  160, 220),
+    ["Diver Down"]                 = Color3.fromRGB(60,  80,  200),
+    ["Whitesnake"]                 = Color3.fromRGB(220, 220, 220),
+    ["C-MOON"]                     = Color3.fromRGB(80,  200, 180),
+    ["Made in Heaven"]             = Color3.fromRGB(200, 220, 255),
+    ["Goo Goo Dolls"]              = Color3.fromRGB(80,  120, 200),
+    ["Manhattan Transfer"]         = Color3.fromRGB(180, 180, 60),
+    ["Highway to Hell"]            = Color3.fromRGB(220, 80,  40),
+    ["Marilyn Manson"]             = Color3.fromRGB(180, 60,  100),
+    ["Jumpin' Jack Flash"]         = Color3.fromRGB(200, 160, 60),
+    ["Limp Bizkit"]                = Color3.fromRGB(80,  80,  200),
+    ["Survivor"]                   = Color3.fromRGB(200, 180, 80),
+    ["Planet Waves"]               = Color3.fromRGB(100, 200, 100),
+    ["Dragon's Dream"]             = Color3.fromRGB(180, 80,  60),
+    ["Yo-Yo Ma"]                   = Color3.fromRGB(200, 220, 160),
+    ["Green, Green Grass of Home"] = Color3.fromRGB(100, 200, 80),
+    ["Jail House Lock"]            = Color3.fromRGB(140, 120, 80),
+    ["Bohemian Rhapsody"]          = Color3.fromRGB(220, 160, 200),
+    ["Sky High"]                   = Color3.fromRGB(120, 200, 230),
+    ["Under World"]                = Color3.fromRGB(60,  40,  100),
+    ["Water Boiling Stand"]        = Color3.fromRGB(60,  180, 220),
+    ["Tusk ACT 1"]                 = Color3.fromRGB(180, 140, 100),
+    ["Tusk ACT 2"]                 = Color3.fromRGB(200, 160, 100),
+    ["Tusk ACT 3"]                 = Color3.fromRGB(220, 180, 100),
+    ["Tusk ACT 4"]                 = Color3.fromRGB(240, 200, 100),
+    ["Ball Breaker"]               = Color3.fromRGB(220, 180, 60),
+    ["Ticket to Ride"]             = Color3.fromRGB(180, 220, 240),
+    ["Oh! Lonesome Me"]            = Color3.fromRGB(200, 200, 160),
+    ["Scary Monsters"]             = Color3.fromRGB(80,  160, 80),
+    ["Cream Starter"]              = Color3.fromRGB(200, 220, 180),
+    ["Dirty Deeds Done Dirt Cheap"] = Color3.fromRGB(60,  120, 200),
+    ["In a Silent Way"]            = Color3.fromRGB(140, 180, 220),
+    ["Hey Ya!"]                    = Color3.fromRGB(220, 200, 80),
+    ["Tomb of the Boom 1"]         = Color3.fromRGB(160, 120, 80),
+    ["Tomb of the Boom 2"]         = Color3.fromRGB(170, 130, 80),
+    ["Tomb of the Boom 3"]         = Color3.fromRGB(180, 140, 80),
+    ["Boku no Rhythm wo Kiitekure"] = Color3.fromRGB(200, 80,  120),
+    ["Wired"]                      = Color3.fromRGB(160, 200, 220),
+    ["Mandom"]                     = Color3.fromRGB(200, 160, 80),
+    ["Catch the Rainbow"]          = Color3.fromRGB(180, 100, 220),
+    ["TATOO YOU!"]                 = Color3.fromRGB(200, 80,  80),
+    ["Tubular Bells"]              = Color3.fromRGB(180, 200, 220),
+    ["20th Century BOY"]           = Color3.fromRGB(200, 160, 60),
+    ["Civil War"]                  = Color3.fromRGB(160, 120, 80),
+    ["Chocolate Disco"]            = Color3.fromRGB(160, 100, 60),
+    ["THE WORLD"]                  = Color3.fromRGB(220, 200, 60),
+    ["Soft & Wet"]                 = Color3.fromRGB(80,  200, 220),
+    ["Paisley Park"]               = Color3.fromRGB(180, 100, 220),
+    ["Dog Style"]                  = Color3.fromRGB(180, 160, 100),
+    ["California King Bed"]        = Color3.fromRGB(80,  120, 180),
+    ["Born This Way"]              = Color3.fromRGB(60,  160, 80),
+    ["Killer Queen 8"]             = Color3.fromRGB(210, 190, 230),
+    ["Nut King Call"]              = Color3.fromRGB(160, 120, 60),
+    ["Paper Moon King"]            = Color3.fromRGB(220, 200, 160),
+    ["King Nothing"]               = Color3.fromRGB(180, 80,  60),
+    ["Speed King"]                 = Color3.fromRGB(220, 140, 40),
+    ["Love Love Deluxe"]           = Color3.fromRGB(230, 120, 170),
+    ["Walking Heart"]              = Color3.fromRGB(220, 80,  100),
+    ["Space Trucking"]             = Color3.fromRGB(80,  120, 200),
+    ["Awaking III Leaves"]         = Color3.fromRGB(100, 180, 80),
+    ["Wonder of U"]                = Color3.fromRGB(60,  60,  180),
+    ["Fun Fun Fun"]                = Color3.fromRGB(220, 200, 60),
+    ["Les Feuilles"]               = Color3.fromRGB(160, 200, 80),
+    ["I Am a Rock"]                = Color3.fromRGB(160, 140, 120),
+    ["Doobie Wah!"]                = Color3.fromRGB(80,  200, 160),
+    ["Schott Key No.1"]            = Color3.fromRGB(180, 180, 200),
+    ["Schott Key No.2"]            = Color3.fromRGB(160, 160, 220),
+    ["Vitamin C"]                  = Color3.fromRGB(220, 180, 60),
+    ["Milagro Man"]                = Color3.fromRGB(200, 160, 40),
+    ["Blue Hawaii"]                = Color3.fromRGB(60,  160, 220),
+    ["Brain Storm"]                = Color3.fromRGB(100, 140, 220),
+    ["Ozon Baby"]                  = Color3.fromRGB(120, 200, 220),
+    ["Doctor Wu"]                  = Color3.fromRGB(160, 120, 80),
+    ["November Rain"]              = Color3.fromRGB(80,  120, 200),
+    ["Smooth Operators"]           = Color3.fromRGB(140, 200, 160),
+    ["THE Hustle"]                 = Color3.fromRGB(200, 140, 60),
+    ["THE MATTEKUDASAI"]           = Color3.fromRGB(200, 100, 160),
+    ["Heaven's Door 9"]            = Color3.fromRGB(210, 170, 230),
+    ["Cat Size"]                   = Color3.fromRGB(220, 180, 120),
+    ["Bigmouth Strikes Again"]     = Color3.fromRGB(200, 100, 80),
+    ["Bags Groove"]                = Color3.fromRGB(160, 80,  60),
+    ["Glory Days"]                 = Color3.fromRGB(220, 200, 80),
+}
+
+local function getStandColor(standName)
+    if not standName or standName == "" then
+        return Color3.fromRGB(180, 180, 180)
+    end
+    return standColors[standName] or Color3.fromRGB(255, 255, 255)
+end
+
 local function NewLine(thickness, color)
     local line = Drawing.new("Line")
     line.Visible = false
@@ -1334,6 +1522,7 @@ local function CreateESP(plr)
         healthbar = NewLine(3, black),
         greenhealth = NewLine(1.5, black),
         standLabel = NewText(13, Color3.fromRGB(255, 215, 0)),
+        distLabel = NewText(11, Color3.fromRGB(200, 200, 200)),
     }
 
     espLibraries[plr] = lib
@@ -1351,6 +1540,14 @@ local function CreateESP(plr)
         local head = char and char:FindFirstChild("Head")
 
         if char and hum and hrp and head and hum.Health > 0 then
+            local myRoot = getRoot()
+            local dist3d = myRoot and math.floor((myRoot.Position - hrp.Position).Magnitude) or 0
+
+            if espRangeLimited and dist3d > espMaxRange then
+                SetVisibility(false, lib)
+                return
+            end
+
             local humPos, onScreen = espCamera:WorldToViewportPoint(hrp.Position)
             if onScreen then
                 local headPos = espCamera:WorldToViewportPoint(head.Position)
@@ -1372,7 +1569,7 @@ local function CreateESP(plr)
                 SizeQuad(lib.black)
 
                 pcall(function()
-                    if Settings.Tracers then
+                    if espTracersEnabled then
                         local origin
                         if Settings.FollowMouse then
                             origin = Vector2.new(espMouse.X, espMouse.Y + 36)
@@ -1385,11 +1582,11 @@ local function CreateESP(plr)
                         lib.blacktracer.From = origin
                         lib.tracer.To = Vector2.new(humPos.X, humPos.Y + distY * 2)
                         lib.blacktracer.To = Vector2.new(humPos.X, humPos.Y + distY * 2)
+                        lib.tracer.Visible = true
+                        lib.blacktracer.Visible = true
                     else
-                        lib.tracer.From = Vector2.new(0, 0)
-                        lib.blacktracer.From = Vector2.new(0, 0)
-                        lib.tracer.To = Vector2.new(0, 0)
-                        lib.blacktracer.To = Vector2.new(0, 0)
+                        lib.tracer.Visible = false
+                        lib.blacktracer.Visible = false
                     end
                 end)
 
@@ -1404,11 +1601,24 @@ local function CreateESP(plr)
                 end)
 
                 pcall(function()
-                    local isStandUser = plr:FindFirstChild("StandUser") ~= nil
-                    lib.standLabel.Text = isStandUser and "[Stand User]" or "[No Stand]"
-                    lib.standLabel.Color = isStandUser and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(180, 180, 180)
+                    local standsFolder = workspace:FindFirstChild("Stands")
+                    local plrStand = standsFolder and standsFolder:FindFirstChild(plr.Name)
+                    local standName = nil
+                    if plrStand then
+                        local attrs = plrStand:FindFirstChild("Attributes")
+                        local nameVal = attrs and attrs:FindFirstChild("StandName")
+                        if nameVal then standName = nameVal.Value end
+                    end
+                    lib.standLabel.Text = standName and ("[" .. standName .. "]") or "[No Stand]"
+                    lib.standLabel.Color = getStandColor(standName)
                     lib.standLabel.Position = Vector2.new(humPos.X, humPos.Y - distY * 2 - 16)
                     lib.standLabel.Visible = true
+                end)
+
+                pcall(function()
+                    lib.distLabel.Text = dist3d .. "m"
+                    lib.distLabel.Position = Vector2.new(humPos.X, humPos.Y + distY * 2 + 4)
+                    lib.distLabel.Visible = true
                 end)
 
                 pcall(function()
@@ -1422,8 +1632,10 @@ local function CreateESP(plr)
                     end
                 end)
 
-                SetVisibility(true, lib)
-                lib.standLabel.Visible = true
+                lib.box.Visible = true
+                lib.black.Visible = true
+                lib.healthbar.Visible = true
+                lib.greenhealth.Visible = true
             else
                 SetVisibility(false, lib)
             end
@@ -1465,6 +1677,140 @@ sections.ESPSection:AddToggle({
             for plr, lib in pairs(espLibraries) do
                 RemoveESP(lib)
                 espLibraries[plr] = nil
+            end
+        end
+    end
+})
+
+sections.ESPSection:AddToggle({
+    enabled = true,
+    text = "ESP Tracers",
+    flag = "ESPTracers_Toggle",
+    risky = false,
+    callback = function(state)
+        espTracersEnabled = state
+    end
+})
+
+sections.ESPSection:AddToggle({
+    enabled = false,
+    text = "ESP Range Limit",
+    flag = "ESPRange_Toggle",
+    risky = false,
+    callback = function(state)
+        espRangeLimited = state
+    end
+})
+
+sections.ESPSection:AddSlider({
+    text = "ESP Max Range",
+    flag = "ESPRange_Value",
+    suffix = "m",
+    value = 500,
+    min = 50,
+    max = 2000,
+    increment = 50,
+    callback = function(v)
+        espMaxRange = v
+    end
+})
+
+sections.ESPSection:AddSeparator({ text = "Proximity Alert" })
+
+sections.ESPSection:AddToggle({
+    enabled = false,
+    text = "Proximity Alert (360m)",
+    flag = "ProximityAlert_Toggle",
+    risky = false,
+    callback = function(state)
+        proximityAlertActive = state
+        if state then
+            pcall(function()
+                proximityAlertGui = Instance.new("ScreenGui")
+                proximityAlertGui.Name = "ProximityAlertGui"
+                proximityAlertGui.ResetOnSpawn = false
+                proximityAlertGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                proximityAlertGui.Parent = game:GetService("CoreGui")
+
+                local frame = Instance.new("Frame")
+                frame.Name = "AlertFrame"
+                frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                frame.BackgroundTransparency = 0.5
+                frame.BorderSizePixel = 0
+                frame.Position = UDim2.new(0.5, -200, 0, 8)
+                frame.Size = UDim2.new(0, 400, 0, 0)
+                frame.AutomaticSize = Enum.AutomaticSize.Y
+                frame.Parent = proximityAlertGui
+
+                local layout = Instance.new("UIListLayout")
+                layout.FillDirection = Enum.FillDirection.Vertical
+                layout.SortOrder = Enum.SortOrder.LayoutOrder
+                layout.Padding = UDim.new(0, 2)
+                layout.Parent = frame
+
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(0, 4)
+                corner.Parent = frame
+
+                local pad = Instance.new("UIPadding")
+                pad.PaddingLeft = UDim.new(0, 6)
+                pad.PaddingRight = UDim.new(0, 6)
+                pad.PaddingTop = UDim.new(0, 4)
+                pad.PaddingBottom = UDim.new(0, 4)
+                pad.Parent = frame
+            end)
+
+            proximityAlertConnection = RunService.Heartbeat:Connect(function()
+                if not library.flags.ProximityAlert_Toggle then return end
+                local gui = proximityAlertGui
+                if not gui then return end
+                local frame = gui:FindFirstChild("AlertFrame")
+                if not frame then return end
+
+                pcall(function()
+                    for _, child in ipairs(frame:GetChildren()) do
+                        if child:IsA("TextLabel") then child:Destroy() end
+                    end
+
+                    local myRoot = getRoot()
+                    if not myRoot then return end
+
+                    local found = {}
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr == player then continue end
+                        local char = plr.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if not hrp then continue end
+                        local d = math.floor((myRoot.Position - hrp.Position).Magnitude)
+                        if d <= 360 then
+                            table.insert(found, { plr = plr, dist = d })
+                        end
+                    end
+
+                    table.sort(found, function(a, b) return a.dist < b.dist end)
+
+                    for _, entry in ipairs(found) do
+                        local displayName = streamerModeActive and "Anonymous" or entry.plr.Name
+                        local lbl = Instance.new("TextLabel")
+                        lbl.BackgroundTransparency = 1
+                        lbl.Size = UDim2.new(1, 0, 0, 18)
+                        lbl.Font = Enum.Font.GothamBold
+                        lbl.TextSize = 13
+                        lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+                        lbl.TextXAlignment = Enum.TextXAlignment.Center
+                        lbl.Text = displayName .. "  |  " .. entry.dist .. "m"
+                        lbl.Parent = frame
+                    end
+                end)
+            end)
+        else
+            if proximityAlertConnection then
+                pcall(function() proximityAlertConnection:Disconnect() end)
+                proximityAlertConnection = nil
+            end
+            if proximityAlertGui then
+                pcall(function() proximityAlertGui:Destroy() end)
+                proximityAlertGui = nil
             end
         end
     end
