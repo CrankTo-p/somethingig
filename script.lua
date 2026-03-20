@@ -1810,10 +1810,39 @@ local function CreateESP(plr)
                 end)
 
                 pcall(function()
+                    local pillarRaces = {
+                        ["Pillar-Man"] = true,
+                        ["Pillar-Man - Wind"] = true,
+                        ["Pillar-Man - Heat"] = true,
+                        ["Pillar-Man - Light"] = true,
+                        ["Ultimate Thing"] = true,
+                    }
+
+                    local function getRaceColor(character)
+                        if not character then return nil end
+                        local race = character:GetAttribute("Race")
+                        if not race then return nil end
+                        if race == "Human" then
+                            return Color3.fromRGB(210, 180, 140)
+                        elseif race == "Cyborg" then
+                            return Color3.fromRGB(80, 90, 100)
+                        elseif race == "Vampire" then
+                            return Color3.fromRGB(200, 20, 40)
+                        elseif pillarRaces[race] then
+                            return Color3.fromRGB(255, 160, 30)
+                        end
+                        return nil
+                    end
+
+                    local raceColor = getRaceColor(char)
+
                     if TeamSettings.Enabled then
                         local col = plr.TeamColor == player.TeamColor and TeamSettings.AllyColor or TeamSettings.EnemyColor
                         lib.tracer.Color = col
                         lib.box.Color = col
+                    elseif raceColor then
+                        lib.box.Color = raceColor
+                        lib.tracer.Color = espTracersEnabled and raceColor or lib.tracer.Color
                     else
                         lib.tracer.Color = Settings.TracerColor
                         lib.box.Color = Settings.BoxColor
